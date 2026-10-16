@@ -17,7 +17,7 @@ def to_networkx(graph: dict) -> nx.DiGraph:
     for n in graph["nodes"]:
         g.add_node(n["id"], label=node_label(n), **n)
     for e in graph["edges"]:
-        g.add_edge(e["src"], e["dst"], wires=tuple(sorted(e["wires"])))
+        g.add_edge(e["src"], e["dst"], label=edge_label(e))
     return g
 
 
@@ -25,8 +25,18 @@ def node_label(node: dict) -> tuple:
     return (node["gate"], tuple(node["qubits"]), tuple(node["clbits"]), tuple(node["params"]))
 
 
-def check(graph: dict) -> list[str]:
-    """Return a list of human-readable problems (empty list == valid)."""
+def edge_label(edge: dict) -> tuple:
+    """What `metrics` compares an edge on. Named to match the PyTorch domain so
+    the two stay interchangeable through `domain.py`."""
+    return tuple(sorted(edge["wires"]))
+
+
+def check(graph: dict, *, shapes: bool = True) -> list[str]:
+    """Return a list of human-readable problems (empty list == valid).
+
+    `shapes` exists only to match the PyTorch domain's signature; a circuit DAG
+    carries no shapes, so it changes nothing here.
+    """
     errors = []
     ids = [n["id"] for n in graph["nodes"]]
     dupes = [i for i, c in Counter(ids).items() if c > 1]
