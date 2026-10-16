@@ -3,3 +3,8 @@ networkx==3.6.1
 matplotlib==3.11.2
 pylatexenc==2.11
 python-pptx==1.0.2
+
+# PyTorch domain (graphart/extract.py). CPU wheels:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+torch==2.14.1
+torchvision==0.29.1
