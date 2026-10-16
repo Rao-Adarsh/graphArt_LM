@@ -37,6 +37,13 @@ ALIASES = {
     "operator.matmul": "matmul", "torch.matmul": "matmul",
     "operator.getitem": "getitem",
     "torch.cat": "cat", "torch.concat": "cat",
+    # Functional activations spelled three ways. The module forms (nn.ReLU) stay
+    # distinct on purpose -- those are layers, with a path and a place in the
+    # hierarchy, which is part of what the project asks the model to recover.
+    "torch.relu": "relu", "F.relu": "relu", "method.relu": "relu",
+    "torch.sigmoid": "sigmoid", "F.sigmoid": "sigmoid", "method.sigmoid": "sigmoid",
+    "torch.tanh": "tanh", "F.tanh": "tanh", "method.tanh": "tanh",
+    "F.gelu": "gelu", "F.silu": "silu", "F.softmax": "softmax", "torch.softmax": "softmax",
     "torch.flatten": "flatten", "method.flatten": "flatten",
     "method.view": "view", "method.reshape": "reshape",
     "method.permute": "permute", "method.transpose": "transpose",
@@ -100,7 +107,11 @@ def _target_name(node: torch.fx.Node) -> str:
         if short == "_operator":
             short = "operator"
         raw = f"{short}.{getattr(target, '__name__', str(target))}"
-        if module.startswith("torch.nn.functional"):
+        # Some functional ops are implemented in C and report torch._C._nn
+        # rather than torch.nn.functional -- gelu and linear among them. Both
+        # are F.<name> as far as the source is concerned, so normalise on the
+        # module rather than listing the exceptions one at a time.
+        if module.startswith(("torch.nn.functional", "torch._C._nn")):
             raw = f"F.{getattr(target, '__name__', target)}"
         return ALIASES.get(raw, raw)
     if node.op == "call_method":
@@ -220,11 +231,30 @@ def graph_from_module(model: torch.nn.Module, *, example_input: torch.Tensor | N
 def graph_from_code(code: str, var: str = "model",
                     example_input: torch.Tensor | None = None,
                     leaf_depth: int | None = None) -> tuple[dict, torch.nn.Module]:
-    """Execute generated source and trace the nn.Module it defines in `var`."""
+    """Execute generated source and trace the nn.Module it defines in `var`.
+
+    If the source also binds `example_input`, that is used for shape
+    propagation unless a tensor is passed explicitly. Generated samples carry
+    their own input that way, which they must: a model asked to predict shapes
+    cannot do it without being told what goes in.
+    """
     namespace: dict = {}
     exec(code, namespace)
     model = namespace.get(var)
     if not isinstance(model, torch.nn.Module):
-        raise ValueError(f"code did not define an nn.Module named {var!r}")
+        # The variable is not always called `model`: generated samples vary it
+        # on purpose, and real code calls it whatever it likes. Fall back to
+        # the module instance the source left behind, when there is just one.
+        found = [v for k, v in namespace.items()
+                 if isinstance(v, torch.nn.Module) and not k.startswith("_")]
+        if len(found) != 1:
+            raise ValueError(
+                f"expected one nn.Module in the source (named {var!r} or otherwise), "
+                f"found {len(found)}")
+        model = found[0]
+    if example_input is None:
+        candidate = namespace.get("example_input")
+        if isinstance(candidate, torch.Tensor):
+            example_input = candidate
     return graph_from_module(model, example_input=example_input,
                              leaf_depth=leaf_depth), model
