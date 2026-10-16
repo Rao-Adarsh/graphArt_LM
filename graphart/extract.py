@@ -132,6 +132,41 @@ class GranularTracer(torch.fx.Tracer):
         return has_children and depth >= self.leaf_depth
 
 
+def _input_slots(node: torch.fx.Node, order: dict) -> dict[int, list[int]]:
+    """Which argument slots each input node fills, as {src id: [slot, ...]}.
+
+    `node.all_input_nodes` cannot be used for this: it deduplicates, so
+    `attn(x, x, x)` reports one input rather than three and `y + y` reports one
+    operand rather than two. Recording the real slots matters because the truth
+    would otherwise say an attention node has a single input, and a model that
+    correctly produced three would be scored wrong.
+
+    Slots count tensor arguments only -- `cat([a, b], dim=1)` has two, not
+    three -- which keeps the index meaningful and matches what a reader of the
+    source would say.
+    """
+    slots: dict[int, list[int]] = {}
+    position = 0
+
+    def walk(arg) -> None:
+        nonlocal position
+        if isinstance(arg, torch.fx.Node):
+            slots.setdefault(order[arg], []).append(position)
+            position += 1
+        elif isinstance(arg, (list, tuple)):
+            for item in arg:
+                walk(item)
+        elif isinstance(arg, dict):
+            for item in arg.values():
+                walk(item)
+
+    for arg in node.args:
+        walk(arg)
+    for arg in node.kwargs.values():
+        walk(arg)
+    return slots
+
+
 def graph_from_module(model: torch.nn.Module, *, example_input: torch.Tensor | None = None,
                       leaf_depth: int | None = None) -> dict:
     """Trace `model` and return the forward pass in our graph schema."""
@@ -170,10 +205,11 @@ def graph_from_module(model: torch.nn.Module, *, example_input: torch.Tensor | N
         nodes.append(entry)
 
         # Argument position matters: `a - b` and `cat([a, b])` are order
-        # sensitive, so the edge carries its slot the way circuit edges
-        # carried their wire.
-        for position, parent in enumerate(node.all_input_nodes):
-            edges.append({"src": order[parent], "dst": idx, "arg": position})
+        # sensitive, so the edge carries its slots the way circuit edges
+        # carried their wires -- including the merge of parallel edges into
+        # one, for the same reason.
+        for src, slots in sorted(_input_slots(node, order).items()):
+            edges.append({"src": src, "dst": idx, "args": slots})
 
     return {"num_inputs": sum(1 for n in nodes if n["op"] == "placeholder"),
             "input_shapes": [n["shape"] for n in nodes if n["op"] == "placeholder"],

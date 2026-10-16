@@ -10,7 +10,7 @@ A graph is a plain dict:
       "num_inputs": 1, "input_shapes": [[1, 8]], "shapes_available": True,
       "nodes": [{"id": 0, "op": "placeholder", "target": "x",
                  "cls": None, "params": {}, "shape": [1, 8]}, ...],
-      "edges": [{"src": 0, "dst": 1, "arg": 0}, ...]
+      "edges": [{"src": 0, "dst": 1, "args": [0]}, ...]
     }
 
 and its text form looks like this:
@@ -33,6 +33,10 @@ and its text form looks like this:
     4 -> 5 : arg0
     5 -> 6 : arg0
 
+An edge carries every argument slot its source fills, so `attn(x, x, x)` is one
+edge reading `: arg0 arg1 arg2` rather than three separate edges -- the same
+merge the circuit schema did when two gates shared several wires.
+
 Three deliberate choices, each with a cost:
 
 * **The `op` keyword is redundant** -- it can be inferred from whether a class
@@ -50,7 +54,7 @@ Three deliberate choices, each with a cost:
   would read better but would break `from_text(to_text(g)) == g`, which
   `score.py` depends on when it compares a parsed reply against the truth dict.
 
-Edges carry their argument position because `a - b` and `cat([a, b])` are order
+Edges carry their argument slots because `a - b` and `cat([a, b])` are order
 sensitive -- the same role the wire label played in the circuit schema.
 """
 
@@ -114,7 +118,8 @@ def to_text(graph: dict) -> str:
                      f"{_fmt_shape(node['shape'])}")
     lines.append("EDGES")
     for edge in graph["edges"]:
-        lines.append(f"{edge['src']} -> {edge['dst']} : arg{edge['arg']}")
+        slots = " ".join(f"arg{a}" for a in edge["args"])
+        lines.append(f"{edge['src']} -> {edge['dst']} : {slots}")
     return "\n".join(lines)
 
 
@@ -126,11 +131,11 @@ _NODE_RE = re.compile(
     r"(?:\s+([A-Za-z_]\w*)(?:\(([^)]*)\))?)?"           # optional Class(params)
     r"(?:\s+\[([^\]]*)\])?\s*$")                        # optional [shape]
 
-# The argument index is optional when reading. A model that omits it on a
-# single-input node is unambiguous; one that omits it on a two-input node gets
-# two arg-0 edges, which simply fails to match the truth. Being lenient here
-# never hides an error, it only avoids discarding an otherwise sound answer.
-_EDGE_RE = re.compile(r"^(\d+)\s*->\s*(\d+)(?:\s*:\s*arg(\d+))?\s*$")
+# The slot list is optional when reading. A model that omits it on a
+# single-input node is unambiguous; one that omits it elsewhere gets arg0,
+# which simply fails to match the truth. Being lenient here never hides an
+# error, it only avoids discarding an otherwise sound answer.
+_EDGE_RE = re.compile(r"^(\d+)\s*->\s*(\d+)(?:\s*:\s*((?:arg\d+[\s,]*)+))?\s*$")
 
 
 def _parse_value(text: str):
@@ -208,8 +213,9 @@ def from_text(text: str) -> dict:
                 "shape": _parse_shape(m.group(6)),
             })
         elif section == "EDGES" and (m := _EDGE_RE.match(line)):
+            slots = [int(a) for a in re.findall(r"arg(\d+)", m.group(3) or "arg0")]
             graph["edges"].append({"src": int(m.group(1)), "dst": int(m.group(2)),
-                                   "arg": int(m.group(3) or 0)})
+                                   "args": slots})
         else:
             raise ParseError(f"line {lineno}: cannot parse {raw!r}")
 
