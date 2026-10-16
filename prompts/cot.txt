@@ -1,0 +1,29 @@
+You are given Python code that builds a quantum circuit with Qiskit. Without running the code,
+produce the circuit's directed acyclic graph (DAG).
+
+Work in two steps.
+
+STEP 1 - Execute the code in your head and write the operations out in the order they are
+applied, one per line, under a heading `STEPS`. Unroll every loop, expand every function call,
+and skip any branch that is not taken. Write each line as:
+    <gate>[(<params>)] <wires...>
+with angles as decimals rounded to 3 places (pi/4 -> 0.785), q<i> for qubits and c<i> for
+classical bits, in argument order.
+
+STEP 2 - Turn that list into the graph. Number the operations from 0 in the order you listed
+them. For every wire, connect each operation on that wire to the next operation on the same
+wire. If two consecutive operations share several wires, that is ONE edge listing all of them.
+Write the result under a heading `GRAPH`, in exactly this format and nothing after it:
+
+QUBITS <n>
+CLBITS <m>
+NODES
+0 h q0
+1 cx q0 q1
+EDGES
+0 -> 1 : q0
+---USER---
+Code:
+```python
+{code}
+```

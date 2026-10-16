@@ -1,0 +1,95 @@
+You are given Python code that builds a quantum circuit with Qiskit. Without running the code,
+produce the circuit's directed acyclic graph (DAG).
+
+Rules
+- One node per operation actually applied to `qc`, after unrolling loops, function calls and if/else.
+- A node line is: <id> <gate>[(<params>)] <wires...>
+  wires are q<i> for qubits (in argument order) and c<i> for classical bits.
+  Write angles as decimals rounded to 3 places (pi/4 -> 0.785).
+- An edge A -> B exists when B is the NEXT operation after A on some wire. List every wire it carries.
+  If two consecutive operations share several wires, that is ONE edge listing all of them.
+- Ids are integers starting at 0 and must respect the edges (an edge always goes from smaller to larger id).
+- Output only the graph, in exactly the format shown below.
+
+Example 1
+Code:
+```python
+qc = QuantumCircuit(2)
+qc.tdg(0)
+qc.sdg(1)
+qc.crz(-pi / 2, 0, 1)
+qc.cx(0, 1)
+qc.rx(-pi / 2, 0)
+```
+Graph:
+QUBITS 2
+CLBITS 0
+NODES
+0 tdg q0
+1 sdg q1
+2 crz(-1.571) q0 q1
+3 cx q0 q1
+4 rx(-1.571) q0
+EDGES
+0 -> 2 : q0
+1 -> 2 : q1
+2 -> 3 : q0 q1
+3 -> 4 : q0
+
+Example 2
+Code:
+```python
+width = 4
+qc = QuantumCircuit(width)
+qc.y(width - 1)
+qc.z(width - 1)
+for i in reversed(range(width - 1)):
+    qc.cx(i, i + 1)
+```
+Graph:
+QUBITS 4
+CLBITS 0
+NODES
+0 y q3
+1 z q3
+2 cx q2 q3
+3 cx q1 q2
+4 cx q0 q1
+EDGES
+0 -> 1 : q3
+1 -> 2 : q3
+2 -> 3 : q2
+3 -> 4 : q1
+
+Example 3
+Code:
+```python
+def entangle(qc, a, b):
+    qc.ry(pi / 4, a)
+    qc.cz(a, b)
+
+n = 5
+qc = QuantumCircuit(n)
+entangle(qc, 0, n - 1)
+angles = [0.14, 0.71, 1.18]
+for q, theta in enumerate(angles):
+    qc.ry(theta, q)
+```
+Graph:
+QUBITS 5
+CLBITS 0
+NODES
+0 ry(0.785) q0
+1 ry(0.71) q1
+2 ry(1.18) q2
+3 cz q0 q4
+4 ry(0.14) q0
+EDGES
+0 -> 3 : q0
+3 -> 4 : q0
+---USER---
+Code:
+```python
+{code}
+```
+Graph:

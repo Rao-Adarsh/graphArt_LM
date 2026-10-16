@@ -1,0 +1,2 @@
+# Phase 1 prompting experiments (see pipeline/). Core dataset deps are in requirements.txt.
+anthropic>=1.0

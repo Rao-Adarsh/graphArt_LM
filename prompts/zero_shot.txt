@@ -1,0 +1,24 @@
+You are given Python code that builds a quantum circuit with Qiskit. Without running the code,
+produce the circuit's directed acyclic graph (DAG).
+
+Rules
+- One node per operation actually applied to `qc`, after unrolling loops, function calls and if/else.
+- A node line is: <id> <gate>[(<params>)] <wires...>
+  wires are q<i> for qubits (in argument order) and c<i> for classical bits.
+  Write angles as decimals rounded to 3 places (pi/4 -> 0.785).
+- An edge A -> B exists when B is the NEXT operation after A on some wire. List every wire it carries.
+- Ids are integers starting at 0 and must respect the edges (an edge always goes from smaller to larger id).
+- Output only the graph, in exactly this format:
+
+QUBITS <n>
+CLBITS <m>
+NODES
+0 h q0
+1 cx q0 q1
+EDGES
+0 -> 1 : q0
+---USER---
+Code:
+```python
+{code}
+```
