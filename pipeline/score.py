@@ -116,7 +116,7 @@ def main() -> None:
     print(f"\n{results_path.name}"
           + (f"   (edges derived from the node order)" if connect else ""))
     print(table("by tier", by_tier))
-    print(table("by circuit size", by_size))
+    print(table("by graph size", by_size))
     print(table("overall", {"all": scored}))
 
     unparsed = [s for s in scored if not s["parsed"]]

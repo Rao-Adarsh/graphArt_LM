@@ -55,9 +55,21 @@ class MockBackend:
 
     name = "mock"
 
+    # The canned reply is in the active domain's format on purpose: a mock that
+    # emits the wrong domain fails to parse, which makes every smoke test look
+    # like a failure and hides real plumbing breakage.
+    DEFAULT_REPLY = ("INPUTS 1\n"
+                     "NODES\n"
+                     "0 placeholder x [1,4]\n"
+                     "1 call_module fc Linear(in=4,out=2,bias=True) [1,2]\n"
+                     "2 output output [1,2]\n"
+                     "EDGES\n"
+                     "0 -> 1 : arg0\n"
+                     "1 -> 2 : arg0")
+
     def __init__(self, model: str = "echo", reply: str = "", **_):
         self.model = model
-        self._reply = reply or ("QUBITS 1\nCLBITS 0\nNODES\n0 h q0\nEDGES\n")
+        self._reply = reply or self.DEFAULT_REPLY
 
     def __call__(self, system: str, user: str) -> str:
         return self._reply

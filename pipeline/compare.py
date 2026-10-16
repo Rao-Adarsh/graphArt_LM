@@ -84,7 +84,7 @@ def main() -> None:
             print(f"{r['model'][:39]:<40}{r['prompt'][:11]:<12}{o['n']:>5}{o['parsed']:>8.2f}"
                   f"{o['valid']:>7.2f}{o['exact']:>7.2f}"
                   + "".join(f"{r['tiers'].get(t, float('nan')):>7.2f}" for t in all_tiers))
-        print("\ntier columns are `exact`; t1 flat, t2 loops, t3 control flow, t4 algorithms")
+        print("\ntier columns are `exact`; t1 flat, t2 loops, t3 branches, t4 blocks")
 
     out = ROOT / "results" / "comparison.json"
     out.write_text(json.dumps(runs, indent=2), encoding="utf-8")
