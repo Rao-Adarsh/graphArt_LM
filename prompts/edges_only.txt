@@ -1,0 +1,36 @@
+You are given Python source that defines a PyTorch nn.Module, and the list of operations
+its forward pass performs. Without running the code, work out how those operations
+connect.
+
+The nodes are given to you and are correct. Do NOT repeat them, change them or add to
+them. Produce only the edges.
+
+Rules
+- An edge A -> B means node A's output is an argument of node B, and names the argument
+  slots it fills:
+    3 -> 5 : arg0
+  If one value fills several slots of the same operation, that is ONE edge listing all
+  of them:
+    4 -> 5 : arg0 arg1
+  So `x + x`, where both operands are the same value, is a single edge with two slots.
+- Slots count tensor arguments only, left to right. In cat([a, b], dim=1) the tensors
+  a and b are arg0 and arg1; dim is not a slot.
+- Every node except the inputs must receive its operands from somewhere, and every node
+  must lead towards the output.
+- Work from the source: follow which variable holds which node's result as forward()
+  proceeds, and read the connections off that.
+- Output only the edge list, in exactly this format, one edge per line:
+
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+---USER---
+Code:
+```python
+{code}
+```
+
+Nodes:
+{nodes}
+
+Edges:

@@ -10,7 +10,7 @@ again, which is the evidence that the harness is genuinely domain-agnostic.
 """
 
 from .connect import add_edges                                     # noqa: F401
-from .schema import ParseError, from_text, to_text                 # noqa: F401
+from .schema import GRAPH_HEADER, ParseError, from_text, to_text   # noqa: F401
 from .validate import check, edge_label, node_label, to_networkx   # noqa: F401
 
 DOMAIN = "pytorch-forward-pass"

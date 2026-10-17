@@ -1,22 +1,44 @@
-You are given Python code that builds a quantum circuit with Qiskit. Without running the code,
-produce the circuit's directed acyclic graph (DAG).
+You are given Python source that defines a PyTorch nn.Module and creates one instance of it.
+Without running the code, produce the graph of its forward pass as torch.fx would trace it.
 
 Rules
-- One node per operation actually applied to `qc`, after unrolling loops, function calls and if/else.
-- A node line is: <id> <gate>[(<params>)] <wires...>
-  wires are q<i> for qubits (in argument order) and c<i> for classical bits.
-  Write angles as decimals rounded to 3 places (pi/4 -> 0.785).
-- An edge A -> B exists when B is the NEXT operation after A on some wire. List every wire it carries.
-- Ids are integers starting at 0 and must respect the edges (an edge always goes from smaller to larger id).
+- One node per traced operation. The op is one of:
+    placeholder     an input to forward()
+    get_attr        a stored parameter or buffer read directly
+    call_module     a layer, e.g. nn.Linear or nn.Conv2d
+    call_function   a free function, e.g. add, cat, relu, gelu
+    call_method     a tensor method, e.g. view, mean, flatten
+    output          the value returned
+- A node line is:
+    <id> <op> <target> [<Class>(<params>)] [<shape>]
+  * <target> is the attribute path for call_module (fc1, blocks.0, layer1.0.conv1),
+    and the normalised function name otherwise (add, cat, relu, gelu, view).
+  * <Class>(<params>) appears for call_module only, with named parameters:
+    Linear(in=8,out=16,bias=True), Conv2d(in=3,out=16,k=3,s=1,p=1).
+  * <shape> is that node's output shape in square brackets, e.g. [2,16].
+    The shape going in is given by example_input at the bottom of the source.
+- Function names are normalised: `x + y`, torch.add(x, y) and x.add(y) are all `add`;
+  F.relu, torch.relu and x.relu() are all `relu`. An activation written as a layer
+  (nn.ReLU) stays a call_module node with its attribute path.
+- An edge A -> B means A's output is an argument of B, and names the slots it fills:
+    3 -> 5 : arg0
+  If one value fills several slots of the same operation, that is ONE edge listing
+  all of them:
+    4 -> 5 : arg0 arg1
+- Ids start at 0 and increase along every edge.
+- Unroll every loop. Expand nn.Sequential and nn.ModuleList into one node per layer,
+  with paths like blocks.0, blocks.1. Omit any branch that cannot run, such as an
+  `if` on an attribute that is False.
 - Output only the graph, in exactly this format:
 
-QUBITS <n>
-CLBITS <m>
+INPUTS 1
 NODES
-0 h q0
-1 cx q0 q1
+0 placeholder x [1,8]
+1 call_module fc Linear(in=8,out=2,bias=True) [1,2]
+2 output output [1,2]
 EDGES
-0 -> 1 : q0
+0 -> 1 : arg0
+1 -> 2 : arg0
 ---USER---
 Code:
 ```python

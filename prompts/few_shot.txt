@@ -1,92 +1,177 @@
-You are given Python code that builds a quantum circuit with Qiskit. Without running the code,
-produce the circuit's directed acyclic graph (DAG).
+You are given Python source that defines a PyTorch nn.Module and creates one instance of it.
+Without running the code, produce the graph of its forward pass as torch.fx would trace it.
 
 Rules
-- One node per operation actually applied to `qc`, after unrolling loops, function calls and if/else.
-- A node line is: <id> <gate>[(<params>)] <wires...>
-  wires are q<i> for qubits (in argument order) and c<i> for classical bits.
-  Write angles as decimals rounded to 3 places (pi/4 -> 0.785).
-- An edge A -> B exists when B is the NEXT operation after A on some wire. List every wire it carries.
-  If two consecutive operations share several wires, that is ONE edge listing all of them.
-- Ids are integers starting at 0 and must respect the edges (an edge always goes from smaller to larger id).
-- Output only the graph, in exactly the format shown below.
+- One node per traced operation. The op is one of:
+    placeholder     an input to forward()
+    get_attr        a stored parameter or buffer read directly
+    call_module     a layer, e.g. nn.Linear or nn.Conv2d
+    call_function   a free function, e.g. add, cat, relu, gelu
+    call_method     a tensor method, e.g. view, mean, flatten
+    output          the value returned
+- A node line is:
+    <id> <op> <target> [<Class>(<params>)] [<shape>]
+  * <target> is the attribute path for call_module, the normalised function name otherwise.
+  * <Class>(<params>) appears for call_module only, with named parameters.
+  * <shape> is that node's output shape. The shape going in is given by example_input.
+- Function names are normalised: `x + y`, torch.add(x, y) and x.add(y) are all `add`;
+  F.relu, torch.relu and x.relu() are all `relu`. An activation written as a layer
+  (nn.ReLU) stays a call_module node with its attribute path.
+- An edge A -> B means A's output is an argument of B, and names the slots it fills.
+  If one value fills several slots of one operation, that is ONE edge listing them all.
+- Ids start at 0 and increase along every edge.
+- Unroll every loop. Expand nn.Sequential and nn.ModuleList into one node per layer.
+  Omit any branch that cannot run.
+- Output only the graph.
 
 Example 1
 Code:
 ```python
-qc = QuantumCircuit(2)
-qc.tdg(0)
-qc.sdg(1)
-qc.crz(-pi / 2, 0, 1)
-qc.cx(0, 1)
-qc.rx(-pi / 2, 0)
+import torch
+from torch import nn
+import torch.nn.functional as func
+
+
+class Encoder(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.body = nn.Linear(12, 48)
+        self.post = nn.Linear(48, 12)
+        self.neck = nn.Linear(12, 2)
+
+    def forward(self, x):
+        x = self.body(x)
+        x = func.gelu(x)
+        x = self.post(x)
+        x = func.gelu(x)
+        x = self.neck(x)
+        return x
+
+
+net = Encoder()
+example_input = torch.randn(2, 12)
 ```
 Graph:
-QUBITS 2
-CLBITS 0
+INPUTS 1
 NODES
-0 tdg q0
-1 sdg q1
-2 crz(-1.571) q0 q1
-3 cx q0 q1
-4 rx(-1.571) q0
+0 placeholder x [2,12]
+1 call_module body Linear(in=12,out=48,bias=True) [2,48]
+2 call_function gelu [2,48]
+3 call_module post Linear(in=48,out=12,bias=True) [2,12]
+4 call_function gelu [2,12]
+5 call_module neck Linear(in=12,out=2,bias=True) [2,2]
+6 output output [2,2]
 EDGES
-0 -> 2 : q0
-1 -> 2 : q1
-2 -> 3 : q0 q1
-3 -> 4 : q0
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
 
 Example 2
 Code:
 ```python
-width = 4
-qc = QuantumCircuit(width)
-qc.y(width - 1)
-qc.z(width - 1)
-for i in reversed(range(width - 1)):
-    qc.cx(i, i + 1)
+import torch
+from torch import nn
+import torch.nn.functional as func
+
+
+class Model(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc_1 = nn.Linear(32, 32, bias=False)
+        self.blocks_1 = nn.ModuleList(
+            [nn.Linear(32, 32, bias=False) for _ in range(2)]
+        )
+        self.fc_2 = nn.Linear(32, 4, bias=False)
+
+    def forward(self, x):
+        h1 = self.fc_1(x)
+        h2 = func.gelu(h1)
+        for blk in self.blocks_1:
+            h2 = blk(h2)
+        h3 = func.gelu(h2)
+        h4 = self.fc_2(h3)
+        return h4
+
+
+module = Model()
+example_input = torch.randn(1, 32)
 ```
 Graph:
-QUBITS 4
-CLBITS 0
+INPUTS 1
 NODES
-0 y q3
-1 z q3
-2 cx q2 q3
-3 cx q1 q2
-4 cx q0 q1
+0 placeholder x [1,32]
+1 call_module fc_1 Linear(in=32,out=32,bias=False) [1,32]
+2 call_function gelu [1,32]
+3 call_module blocks_1.0 Linear(in=32,out=32,bias=False) [1,32]
+4 call_module blocks_1.1 Linear(in=32,out=32,bias=False) [1,32]
+5 call_function gelu [1,32]
+6 call_module fc_2 Linear(in=32,out=4,bias=False) [1,4]
+7 output output [1,4]
 EDGES
-0 -> 1 : q3
-1 -> 2 : q3
-2 -> 3 : q2
-3 -> 4 : q1
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
 
 Example 3
 Code:
 ```python
-def entangle(qc, a, b):
-    qc.ry(pi / 4, a)
-    qc.cz(a, b)
+import torch
+import torch.nn as nn
+import torch.nn.functional as fn
 
-n = 5
-qc = QuantumCircuit(n)
-entangle(qc, 0, n - 1)
-angles = [0.14, 0.71, 1.18]
-for q, theta in enumerate(angles):
-    qc.ry(theta, q)
+
+class MyNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.gate = nn.Linear(32, 32, bias=False)
+        self.pre = nn.Linear(32, 16, bias=False)
+        self.encode = nn.Linear(32, 16, bias=False)
+        self.extra_head = False
+        self.tail = nn.Linear(32, 32, bias=False)
+        self.mix = nn.Linear(32, 10, bias=False)
+
+    def forward(self, x):
+        h1 = self.gate(x)
+        h2 = fn.silu(h1)
+        b = self.pre(h2)
+        c = self.encode(h2)
+        h3 = torch.cat([b, c], dim=1)
+        if self.extra_head:
+            h3 = self.tail(h3)
+        h4 = self.mix(h3)
+        return h4
+
+
+m = MyNet()
+example_input = torch.randn(2, 32)
 ```
 Graph:
-QUBITS 5
-CLBITS 0
+INPUTS 1
 NODES
-0 ry(0.785) q0
-1 ry(0.71) q1
-2 ry(1.18) q2
-3 cz q0 q4
-4 ry(0.14) q0
+0 placeholder x [2,32]
+1 call_module gate Linear(in=32,out=32,bias=False) [2,32]
+2 call_function silu [2,32]
+3 call_module pre Linear(in=32,out=16,bias=False) [2,16]
+4 call_module encode Linear(in=32,out=16,bias=False) [2,16]
+5 call_function cat [2,32]
+6 call_module mix Linear(in=32,out=10,bias=False) [2,10]
+7 output output [2,10]
 EDGES
-0 -> 3 : q0
-3 -> 4 : q0
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+2 -> 4 : arg0
+3 -> 5 : arg0
+4 -> 5 : arg1
+5 -> 6 : arg0
+6 -> 7 : arg0
 ---USER---
 Code:
 ```python

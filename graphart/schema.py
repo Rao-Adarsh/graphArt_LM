@@ -68,6 +68,8 @@ LIST_SEP = "x"
 TUPLE_SEP = "|"
 NO_SHAPE = "?"
 
+GRAPH_HEADER = "INPUTS"   # the line a reply's graph starts with
+
 OPS = ("placeholder", "get_attr", "call_module", "call_function", "call_method", "output")
 
 

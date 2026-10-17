@@ -1,0 +1,167 @@
+You are given Python source that defines a PyTorch nn.Module and creates one instance of it.
+Without running the code, produce the graph of its forward pass as torch.fx would trace it.
+
+Rules
+- One node per traced operation. The op is one of:
+    placeholder     an input to forward()
+    get_attr        a stored parameter or buffer read directly
+    call_module     a layer, e.g. nn.Linear or nn.Conv2d
+    call_function   a free function, e.g. add, cat, relu, gelu
+    call_method     a tensor method, e.g. view, mean, flatten
+    output          the value returned
+- A node line is:
+    <id> <op> <target> [<Class>(<params>)] [<shape>]
+  * <target> is the attribute path for call_module, the normalised function name otherwise.
+  * <Class>(<params>) appears for call_module only, with named parameters.
+  * <shape> is that node's output shape. The shape going in is given by example_input.
+- Function names are normalised: `x + y`, torch.add(x, y) and x.add(y) are all `add`;
+  F.relu, torch.relu and x.relu() are all `relu`. An activation written as a layer
+  (nn.ReLU) stays a call_module node with its attribute path.
+- An edge A -> B means A's output is an argument of B, and names the slots it fills.
+  If one value fills several slots of one operation, that is ONE edge listing them all.
+- Ids start at 0 and increase along every edge.
+
+HOW TO WORK IT OUT
+
+Simulate forward() one statement at a time, as if you were the interpreter.
+
+After each statement, record which node each live variable now refers to. That running
+record is the whole trick: an edge is just "the node this variable pointed at, feeding
+the operation that reads it". Get the record right and the edges follow mechanically.
+
+Write the simulation under a heading SIMULATION, one line per source statement:
+
+    <statement>   ->   n<id>  <op> <target> [<Class>(<params>)] [<shape>]   <- <sources>
+
+Then write the final answer under a heading GRAPH, and nothing after it.
+
+Example 1
+Code:
+```python
+import torch
+from torch import nn
+import torch.nn.functional as func
+
+
+class Model(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc_1 = nn.Linear(32, 32, bias=False)
+        self.blocks_1 = nn.ModuleList(
+            [nn.Linear(32, 32, bias=False) for _ in range(2)]
+        )
+        self.fc_2 = nn.Linear(32, 4, bias=False)
+
+    def forward(self, x):
+        h1 = self.fc_1(x)
+        h2 = func.gelu(h1)
+        for blk in self.blocks_1:
+            h2 = blk(h2)
+        h3 = func.gelu(h2)
+        h4 = self.fc_2(h3)
+        return h4
+
+
+module = Model()
+example_input = torch.randn(1, 32)
+```
+SIMULATION
+x is the input              ->  n0  placeholder x [1,32]
+h1 = self.fc_1(x)           ->  n1  call_module fc_1 Linear(in=32,out=32,bias=False) [1,32]   <- n0 arg0
+h2 = func.gelu(h1)          ->  n2  call_function gelu [1,32]                                 <- n1 arg0
+for blk in self.blocks_1    ->  the ModuleList holds 2 layers, so the body runs twice
+  h2 = blk(h2)  [blocks_1.0]->  n3  call_module blocks_1.0 Linear(in=32,out=32,bias=False) [1,32]  <- n2 arg0
+  h2 = blk(h2)  [blocks_1.1]->  n4  call_module blocks_1.1 Linear(in=32,out=32,bias=False) [1,32]  <- n3 arg0
+h3 = func.gelu(h2)          ->  n5  call_function gelu [1,32]                                 <- n4 arg0
+h4 = self.fc_2(h3)          ->  n6  call_module fc_2 Linear(in=32,out=4,bias=False) [1,4]     <- n5 arg0
+return h4                   ->  n7  output output [1,4]                                       <- n6 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [1,32]
+1 call_module fc_1 Linear(in=32,out=32,bias=False) [1,32]
+2 call_function gelu [1,32]
+3 call_module blocks_1.0 Linear(in=32,out=32,bias=False) [1,32]
+4 call_module blocks_1.1 Linear(in=32,out=32,bias=False) [1,32]
+5 call_function gelu [1,32]
+6 call_module fc_2 Linear(in=32,out=4,bias=False) [1,4]
+7 output output [1,4]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+
+Example 2
+Code:
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as fn
+
+
+class MyNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.gate = nn.Linear(32, 32, bias=False)
+        self.pre = nn.Linear(32, 16, bias=False)
+        self.encode = nn.Linear(32, 16, bias=False)
+        self.extra_head = False
+        self.tail = nn.Linear(32, 32, bias=False)
+        self.mix = nn.Linear(32, 10, bias=False)
+
+    def forward(self, x):
+        h1 = self.gate(x)
+        h2 = fn.silu(h1)
+        b = self.pre(h2)
+        c = self.encode(h2)
+        h3 = torch.cat([b, c], dim=1)
+        if self.extra_head:
+            h3 = self.tail(h3)
+        h4 = self.mix(h3)
+        return h4
+
+
+m = MyNet()
+example_input = torch.randn(2, 32)
+```
+SIMULATION
+x is the input                ->  n0  placeholder x [2,32]
+h1 = self.gate(x)             ->  n1  call_module gate Linear(in=32,out=32,bias=False) [2,32]    <- n0 arg0
+h2 = fn.silu(h1)              ->  n2  call_function silu [2,32]                                  <- n1 arg0
+b = self.pre(h2)              ->  n3  call_module pre Linear(in=32,out=16,bias=False) [2,16]     <- n2 arg0
+c = self.encode(h2)           ->  n4  call_module encode Linear(in=32,out=16,bias=False) [2,16]  <- n2 arg0
+      h2 is still n2, so both branches read the same node
+h3 = torch.cat([b, c], dim=1) ->  n5  call_function cat [2,32]                     <- n3 arg0, n4 arg1
+      16 + 16 = 32 along dim 1
+if self.extra_head:           ->  the attribute is False, so self.tail never runs and gets no node
+h4 = self.mix(h3)             ->  n6  call_module mix Linear(in=32,out=10,bias=False) [2,10]     <- n5 arg0
+return h4                     ->  n7  output output [2,10]                                       <- n6 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [2,32]
+1 call_module gate Linear(in=32,out=32,bias=False) [2,32]
+2 call_function silu [2,32]
+3 call_module pre Linear(in=32,out=16,bias=False) [2,16]
+4 call_module encode Linear(in=32,out=16,bias=False) [2,16]
+5 call_function cat [2,32]
+6 call_module mix Linear(in=32,out=10,bias=False) [2,10]
+7 output output [2,10]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+2 -> 4 : arg0
+3 -> 5 : arg0
+4 -> 5 : arg1
+5 -> 6 : arg0
+6 -> 7 : arg0
+---USER---
+Code:
+```python
+{code}
+```

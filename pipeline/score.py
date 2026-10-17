@@ -14,22 +14,25 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from graphart.domain import ParseError, add_edges, from_text
-from graphart.metrics import compare
+from graphart.domain import GRAPH_HEADER, ParseError, from_text, to_text
+from graphart.metrics import compare, compare_nodes
 
 ROOT = Path(__file__).resolve().parents[1]
 SIZE_BUCKETS = [(3, 8, "3-8 nodes"), (9, 15, "9-15"), (16, 25, "16-25"), (26, 10 ** 6, "26+")]
-EMPTY = {"num_qubits": 0, "num_clbits": 0, "nodes": [], "edges": []}
+EMPTY = {"num_inputs": 0, "input_shapes": [], "shapes_available": False,
+         "nodes": [], "edges": []}
 
 
 def extract_graph_block(reply: str) -> str:
     """Slice out the graph, ignoring chain-of-thought, prose and code fences.
 
-    Anything before the last `QUBITS` line is preamble, so a CoT reply that
-    writes its working first still scores on the answer it finished with.
+    Anything before the last header line is preamble, so a reply that writes
+    its working out first -- which cot and cos both ask for -- still scores on
+    the answer it finished with. The header comes from the domain; hardcoding
+    it silently broke every reasoning prompt when the domain changed.
     """
     lines = reply.splitlines()
-    starts = [i for i, line in enumerate(lines) if line.strip().startswith("QUBITS")]
+    starts = [i for i, line in enumerate(lines) if line.strip().startswith(GRAPH_HEADER)]
     if not starts:
         return reply
     block = lines[starts[-1]:]
@@ -39,10 +42,23 @@ def extract_graph_block(reply: str) -> str:
     return "\n".join(block)
 
 
-def score_reply(reply: str, truth: dict, *, connect: bool) -> dict:
-    """Parse one reply and compare it with the ground truth."""
+def _splice_nodes(reply: str, truth: dict) -> str:
+    """For the edges-only ablation: put the given nodes back in front of the
+    model's edge list, so there is a whole graph to parse and check."""
+    edges = reply.split("EDGES", 1)[1] if "EDGES" in reply else reply
+    return to_text({**truth, "edges": []}) + "\n" + edges.strip()
+
+
+def score_reply(reply: str, truth: dict, *, mode: str = "full") -> dict:
+    """Parse one reply and compare it with the ground truth.
+
+    mode "full"  -- the reply is a whole graph
+         "nodes" -- the reply lists operations only; edges were not asked for
+         "edges" -- the reply lists edges only; the nodes were given in the prompt
+    """
     try:
-        predicted = from_text(extract_graph_block(reply))
+        text = _splice_nodes(reply, truth) if mode == "edges" else extract_graph_block(reply)
+        predicted = from_text(text)
     except (ParseError, ValueError, IndexError) as exc:
         # An empty graph trivially passes the structural checks, so `valid` has to
         # be forced down here -- a reply we cannot read is not a well-formed DAG.
@@ -53,8 +69,8 @@ def score_reply(reply: str, truth: dict, *, connect: bool) -> dict:
         # vacuously, so it has to be failed explicitly rather than scored valid.
         return {**compare(EMPTY, truth), "valid": False, "parsed": False,
                 "parse_error": "empty reply -- no nodes"}
-    if connect:
-        predicted = add_edges(predicted)
+    if mode == "nodes":
+        return {**compare_nodes(predicted, truth), "parsed": True, "parse_error": None}
     return {**compare(predicted, truth), "parsed": True, "parse_error": None}
 
 
@@ -64,7 +80,16 @@ def _mean(values: list[float]) -> float:
 
 def summarise(scored: list[dict]) -> dict:
     keys = ("parsed", "valid", "exact", "node_f1", "edge_f1")
-    return {k: round(_mean([float(s[k]) for s in scored]), 3) for k in keys} | {"n": len(scored)}
+    out = {}
+    for k in keys:
+        # None means "not asked for in this mode", which must not average as 0.
+        values = [float(s[k]) for s in scored if s.get(k) is not None]
+        out[k] = round(_mean(values), 3) if values else None
+    return out | {"n": len(scored)}
+
+
+def _cell(value) -> str:
+    return "   -  " if value is None else f"{value:>6.2f}"
 
 
 def table(title: str, groups: dict[str, list[dict]]) -> str:
@@ -74,8 +99,8 @@ def table(title: str, groups: dict[str, list[dict]]) -> str:
     lines = [header, "-" * len(header.splitlines()[-1])]
     for name, rows in groups.items():
         s = summarise(rows)
-        lines.append(f"{name:<14}{s['n']:>5}{s['parsed']:>9.2f}{s['valid']:>8.2f}"
-                     f"{s['exact']:>8.2f}{s['node_f1']:>10.2f}{s['edge_f1']:>10.2f}")
+        lines.append(f"{name:<14}{s['n']:>5}   {_cell(s['parsed'])}  {_cell(s['valid'])}"
+                     f"  {_cell(s['exact'])}    {_cell(s['node_f1'])}    {_cell(s['edge_f1'])}")
     return "\n".join(lines)
 
 
@@ -83,9 +108,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("results", help="a results/*.jsonl file written by run_prompting.py")
     ap.add_argument("--split", default="test", choices=["train", "val", "test"])
-    ap.add_argument("--connect", action="store_true",
-                    help="derive the edges from the node order (for the gates_only ablation); "
-                         "inferred automatically when the run's prompt is gates_only")
+    ap.add_argument("--mode", choices=["full", "nodes", "edges"],
+                    help="what the reply contains; inferred from the run's prompt name")
     ap.add_argument("--slides", action="store_true",
                     help="also print the per-tier rows as a RESULTS literal for make_slides.py")
     args = ap.parse_args()
@@ -96,14 +120,15 @@ def main() -> None:
               (json.loads(line) for line in
                (ROOT / "data" / "generated" / f"{args.split}.jsonl").open(encoding="utf-8"))}
 
-    connect = args.connect or "gates_only" in results_path.stem
+    mode = args.mode or ("nodes" if "nodes_only" in results_path.stem
+                         else "edges" if "edges_only" in results_path.stem else "full")
     scored = []
     for record in records:
         truth = truths.get(record["id"])
         if truth is None:
             print(f"warning: {record['id']} is not in the {args.split} split -- skipped")
             continue
-        scored.append({**record, **score_reply(record["reply"], truth, connect=connect)})
+        scored.append({**record, **score_reply(record["reply"], truth, mode=mode)})
 
     if not scored:
         raise SystemExit("nothing to score")
@@ -113,8 +138,7 @@ def main() -> None:
     by_size = {label: rows for lo, hi, label in SIZE_BUCKETS
                if (rows := [s for s in scored if lo <= s["num_nodes"] <= hi])}
 
-    print(f"\n{results_path.name}"
-          + (f"   (edges derived from the node order)" if connect else ""))
+    print(f"\n{results_path.name}" + (f"   (mode: {mode})" if mode != "full" else ""))
     print(table("by tier", by_tier))
     print(table("by graph size", by_size))
     print(table("overall", {"all": scored}))
@@ -125,7 +149,7 @@ def main() -> None:
         for s in unparsed[:3]:
             print(f"  {s['id']}: {s['parse_error']}")
 
-    summary = {"results": results_path.name, "connect": connect,
+    summary = {"results": results_path.name, "mode": mode,
                "overall": summarise(scored),
                "by_tier": {k: summarise(v) for k, v in by_tier.items()},
                "by_size": {k: summarise(v) for k, v in by_size.items()}}
@@ -137,8 +161,9 @@ def main() -> None:
         print("\nRESULTS = [")
         for name, rows in by_tier.items():
             s = summarise(rows)
-            print(f'    ("{name.title()}", "{s["valid"]:.2f}", "{s["exact"]:.2f}", '
-                  f'"{s["node_f1"]:.2f}", "{s["edge_f1"]:.2f}"),')
+            print(f'    ("{name.title()}", "{_cell(s["valid"]).strip()}", '
+                  f'"{_cell(s["exact"]).strip()}", "{_cell(s["node_f1"]).strip()}", '
+                  f'"{_cell(s["edge_f1"]).strip()}"),')
         print("]")
 
 

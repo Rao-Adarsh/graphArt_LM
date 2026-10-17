@@ -15,7 +15,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from pipeline.score import score_reply, summarise
+from pipeline.score import _cell, score_reply, summarise
+
+
+def _flat(value) -> str:
+    """Bare number, or a dash when the mode did not ask for that metric."""
+    return _cell(value).strip()
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -28,8 +33,9 @@ def load_truths(split: str) -> dict:
 
 def score_run(path: Path, truths: dict) -> dict | None:
     records = [json.loads(line) for line in path.open(encoding="utf-8")]
-    connect = "gates_only" in path.stem
-    scored = [{**r, **score_reply(r["reply"], truths[r["id"]], connect=connect)}
+    mode = ("nodes" if "nodes_only" in path.stem
+            else "edges" if "edges_only" in path.stem else "full")
+    scored = [{**r, **score_reply(r["reply"], truths[r["id"]], mode=mode)}
               for r in records if r["id"] in truths]
     if not scored:
         return None
@@ -70,9 +76,9 @@ def main() -> None:
         print("|" + "|".join(["---"] * len(head)) + "|")
         for r in runs:
             o = r["overall"]
-            cells = [f"`{r['model']}`", r["prompt"], str(o["n"]), f"{o['parsed']:.2f}",
-                     f"{o['valid']:.2f}", f"**{o['exact']:.2f}**"] + \
-                    [f"{r['tiers'].get(t, float('nan')):.2f}" for t in all_tiers]
+            cells = [f"`{r['model']}`", r["prompt"], str(o["n"]), _flat(o["parsed"]),
+                     _flat(o["valid"]), f"**{_flat(o['exact'])}**"] + \
+                    [_flat(r["tiers"].get(t)) for t in all_tiers]
             print("| " + " | ".join(cells) + " |")
     else:
         header = (f"{'model':<40}{'prompt':<12}{'n':>5}{'parsed':>8}{'valid':>7}"
@@ -81,9 +87,9 @@ def main() -> None:
         print("-" * len(header))
         for r in runs:
             o = r["overall"]
-            print(f"{r['model'][:39]:<40}{r['prompt'][:11]:<12}{o['n']:>5}{o['parsed']:>8.2f}"
-                  f"{o['valid']:>7.2f}{o['exact']:>7.2f}"
-                  + "".join(f"{r['tiers'].get(t, float('nan')):>7.2f}" for t in all_tiers))
+            print(f"{r['model'][:39]:<40}{r['prompt'][:11]:<12}{o['n']:>5} {_cell(o['parsed'])}"
+                  f" {_cell(o['valid'])} {_cell(o['exact'])}"
+                  + "".join(f" {_cell(r['tiers'].get(t))}" for t in all_tiers))
         print("\ntier columns are `exact`; t1 flat, t2 loops, t3 branches, t4 blocks")
 
     out = ROOT / "results" / "comparison.json"

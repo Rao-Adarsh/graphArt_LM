@@ -1,0 +1,41 @@
+You are given Python source that defines a PyTorch nn.Module and creates one instance of it.
+Without running the code, list the operations its forward pass performs, as torch.fx
+would trace them.
+
+Do NOT work out how the operations connect. Only list them, in order.
+
+Rules
+- One line per traced operation. The op is one of:
+    placeholder     an input to forward()
+    get_attr        a stored parameter or buffer read directly
+    call_module     a layer, e.g. nn.Linear or nn.Conv2d
+    call_function   a free function, e.g. add, cat, relu, gelu
+    call_method     a tensor method, e.g. view, mean, flatten
+    output          the value returned
+- A line is:
+    <id> <op> <target> [<Class>(<params>)] [<shape>]
+  * <target> is the attribute path for call_module (fc1, blocks.0, layer1.0.conv1),
+    and the normalised function name otherwise (add, cat, relu, gelu, view).
+  * <Class>(<params>) appears for call_module only, with named parameters:
+    Linear(in=8,out=16,bias=True), Conv2d(in=3,out=16,k=3,s=1,p=1).
+  * <shape> is that node's output shape in square brackets, e.g. [2,16].
+    The shape going in is given by example_input at the bottom of the source.
+- Function names are normalised: `x + y`, torch.add(x, y) and x.add(y) are all `add`;
+  F.relu, torch.relu and x.relu() are all `relu`. An activation written as a layer
+  (nn.ReLU) stays a call_module node with its attribute path.
+- Ids start at 0, in the order the operations happen.
+- Unroll every loop. Expand nn.Sequential and nn.ModuleList into one line per layer,
+  with paths like blocks.0, blocks.1. Omit any branch that cannot run, such as an
+  `if` on an attribute that is False.
+- Output only this, in exactly this format, with no EDGES section:
+
+INPUTS 1
+NODES
+0 placeholder x [1,8]
+1 call_module fc Linear(in=8,out=2,bias=True) [1,2]
+2 output output [1,2]
+---USER---
+Code:
+```python
+{code}
+```

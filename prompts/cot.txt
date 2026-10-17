@@ -1,27 +1,47 @@
-You are given Python code that builds a quantum circuit with Qiskit. Without running the code,
-produce the circuit's directed acyclic graph (DAG).
+You are given Python source that defines a PyTorch nn.Module and creates one instance of it.
+Without running the code, produce the graph of its forward pass as torch.fx would trace it.
 
-Work in two steps.
+Rules
+- One node per traced operation. The op is one of:
+    placeholder     an input to forward()
+    get_attr        a stored parameter or buffer read directly
+    call_module     a layer, e.g. nn.Linear or nn.Conv2d
+    call_function   a free function, e.g. add, cat, relu, gelu
+    call_method     a tensor method, e.g. view, mean, flatten
+    output          the value returned
+- A node line is:
+    <id> <op> <target> [<Class>(<params>)] [<shape>]
+  * <target> is the attribute path for call_module (fc1, blocks.0, layer1.0.conv1),
+    and the normalised function name otherwise (add, cat, relu, gelu, view).
+  * <Class>(<params>) appears for call_module only, with named parameters:
+    Linear(in=8,out=16,bias=True), Conv2d(in=3,out=16,k=3,s=1,p=1).
+  * <shape> is that node's output shape in square brackets, e.g. [2,16].
+    The shape going in is given by example_input at the bottom of the source.
+- Function names are normalised: `x + y`, torch.add(x, y) and x.add(y) are all `add`;
+  F.relu, torch.relu and x.relu() are all `relu`. An activation written as a layer
+  (nn.ReLU) stays a call_module node with its attribute path.
+- An edge A -> B means A's output is an argument of B, and names the slots it fills:
+    3 -> 5 : arg0
+  If one value fills several slots of the same operation, that is ONE edge listing
+  all of them:
+    4 -> 5 : arg0 arg1
+- Ids start at 0 and increase along every edge.
+- Unroll every loop. Expand nn.Sequential and nn.ModuleList into one node per layer,
+  with paths like blocks.0, blocks.1. Omit any branch that cannot run, such as an
+  `if` on an attribute that is False.
 
-STEP 1 - Execute the code in your head and write the operations out in the order they are
-applied, one per line, under a heading `STEPS`. Unroll every loop, expand every function call,
-and skip any branch that is not taken. Write each line as:
-    <gate>[(<params>)] <wires...>
-with angles as decimals rounded to 3 places (pi/4 -> 0.785), q<i> for qubits and c<i> for
-classical bits, in argument order.
+Think it through first. Write your reasoning under a heading REASONING, in whatever
+way you find most useful. Then write the final answer under a heading GRAPH, in
+exactly this format and with nothing after it:
 
-STEP 2 - Turn that list into the graph. Number the operations from 0 in the order you listed
-them. For every wire, connect each operation on that wire to the next operation on the same
-wire. If two consecutive operations share several wires, that is ONE edge listing all of them.
-Write the result under a heading `GRAPH`, in exactly this format and nothing after it:
-
-QUBITS <n>
-CLBITS <m>
+INPUTS 1
 NODES
-0 h q0
-1 cx q0 q1
+0 placeholder x [1,8]
+1 call_module fc Linear(in=8,out=2,bias=True) [1,2]
+2 output output [1,2]
 EDGES
-0 -> 1 : q0
+0 -> 1 : arg0
+1 -> 2 : arg0
 ---USER---
 Code:
 ```python

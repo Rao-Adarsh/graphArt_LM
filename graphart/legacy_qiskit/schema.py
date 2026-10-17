@@ -30,6 +30,7 @@ The same graph has a compact text form, which is what an LLM reads/writes:
 import re
 
 PARAM_DECIMALS = 3
+GRAPH_HEADER = "QUBITS"   # see the PyTorch schema; named to match
 
 
 def wire_name(kind: str, index: int) -> str:

@@ -72,6 +72,20 @@ def _shape_accuracy(pred: dict, truth: dict) -> float | None:
     return sum((pred_full & true_full).values()) / matched
 
 
+def compare_nodes(pred: dict, truth: dict) -> dict:
+    """Score a node list on its own, for the nodes-only ablation.
+
+    There are no edges to check, so `valid` and `edge_f1` are None rather than
+    0 -- an edgeless answer is not an invalid graph, it is a different and
+    smaller question, and reporting 0 would read as a failure.
+    """
+    f1 = _f1(Counter(node_label(n) for n in pred["nodes"]),
+             Counter(node_label(n) for n in truth["nodes"]))
+    return {"valid": None, "valid_topology": None, "errors": [],
+            "exact": f1["f1"] == 1.0, "node_f1": f1["f1"], "edge_f1": None,
+            "shape_acc": _shape_accuracy(pred, truth)}
+
+
 def compare(pred: dict, truth: dict) -> dict:
     errors = check(pred)
     structural = check(pred, shapes=False)

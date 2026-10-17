@@ -38,6 +38,18 @@ def load_prompt(name: str) -> tuple[str, str]:
     return "", text.strip()
 
 
+def _render(template: str, row: dict) -> str:
+    """Fill a prompt template for one sample.
+
+    `{nodes}` is for the edges-only ablation, which hands the model the correct
+    operations and asks only how they connect.
+    """
+    text = template.replace("{code}", row["code"].strip())
+    if "{nodes}" in text:
+        text = text.replace("{nodes}", row["target"].split("EDGES")[0].strip())
+    return text
+
+
 def load_split(split: str, tiers: list[int] | None, limit: int | None,
                stratify: int | None) -> list[dict]:
     path = ROOT / "data" / "generated" / f"{split}.jsonl"
@@ -96,7 +108,7 @@ def main() -> None:
     if args.dry_run:
         print(f"=== SYSTEM ({len(system)} chars) ===\n{system}")
         print(f"\n=== USER (sample {rows[0]['id']}) ===")
-        print(user_template.replace("{code}", rows[0]["code"].strip()))
+        print(_render(user_template, rows[0]))
         print(f"\n=== {len(rows)} samples would be sent to {args.backend}/{model_name} ===")
         print(cost_module.render(estimate, args.backend, model_name))
         print("\n  --dry-run: nothing was sent, nothing was charged.")
@@ -136,7 +148,7 @@ def main() -> None:
         else:
             started = time.time()
             try:
-                reply = backend(system, user_template.replace("{code}", row["code"].strip()))
+                reply = backend(system, _render(user_template, row))
                 error = None
                 cache_file.write_text(reply, encoding="utf-8")
             except BackendError as exc:      # configuration problems: stop, do not burn the run
