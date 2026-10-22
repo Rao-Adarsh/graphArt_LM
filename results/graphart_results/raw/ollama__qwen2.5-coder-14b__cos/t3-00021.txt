@@ -1,0 +1,47 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [1,16]
+x = self.expand(x)            ->  n1  call_module expand Linear(in=16,out=16,bias=True) [1,16]   <- n0 arg0
+x = torch.sigmoid(x)          ->  n2  call_method sigmoid [1,16]                              <- n1 arg0
+if self.wide:                 ->  the attribute is False, so self.post never runs and gets no node
+u = self.encode(x)             ->  n3  call_module encode Linear(in=16,out=8,bias=True) [1,8]     <- n2 arg0
+right = self.proj(x)          ->  n4  call_module proj Linear(in=16,out=8,bias=True) [1,8]       <- n2 arg0
+x = torch.cat([u, right], dim=1) ->  n5  call_function cat [1,16]                              <- n3 arg0, n4 arg1
+q = self.merge(x)              ->  n6  call_module merge Linear(in=16,out=16,bias=True) [1,16]   <- n5 arg0
+p = self.neck(x)               ->  n7  call_module neck Linear(in=16,out=16,bias=True) [1,16]    <- n5 arg0
+c = self.shrink(x)             ->  n8  call_module shrink Linear(in=16,out=16,bias=True) [1,16]  <- n5 arg0
+x = q + p                     ->  n9  call_function add [1,16]                                <- n6 arg0, n7 arg1
+x = x + c                     ->  n10 call_function add [1,16]                                <- n9 arg0, n8 arg1
+x = self.pre(x)                ->  n11 call_module pre Linear(in=16,out=2,bias=True) [1,2]      <- n10 arg0
+return x                      ->  n12 output output [1,2]                                      <- n11 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [1,16]
+1 call_module expand Linear(in=16,out=16,bias=True) [1,16]
+2 call_method sigmoid [1,16]
+3 call_module encode Linear(in=16,out=8,bias=True) [1,8]
+4 call_module proj Linear(in=16,out=8,bias=True) [1,8]
+5 call_function cat [1,16]
+6 call_module merge Linear(in=16,out=16,bias=True) [1,16]
+7 call_module neck Linear(in=16,out=16,bias=True) [1,16]
+8 call_module shrink Linear(in=16,out=16,bias=True) [1,16]
+9 call_function add [1,16]
+10 call_function add [1,16]
+11 call_module pre Linear(in=16,out=2,bias=True) [1,2]
+12 output output [1,2]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+2 -> 4 : arg0
+3 -> 5 : arg0
+4 -> 5 : arg1
+5 -> 6 : arg0
+5 -> 7 : arg0
+5 -> 8 : arg0
+6 -> 9 : arg0
+7 -> 9 : arg1
+9 -> 10 : arg0
+8 -> 10 : arg1
+10 -> 11 : arg0
+11 -> 12 : arg0

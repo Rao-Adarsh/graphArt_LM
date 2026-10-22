@@ -1,0 +1,42 @@
+REASONING:
+1. **Inputs**: The input to the forward pass is a tensor of shape `[1, 24]`.
+2. **Nodes**:
+   - **Placeholder**: The input tensor `x` with shape `[1, 24]`.
+   - **call_module**: The first linear layer `f1` with parameters `Linear(in=24, out=24)`.
+   - **call_module**: The activation function `a1` which is `Tanh`.
+   - **call_module**: The sequential block `b1` which contains three sequential layers, each with a linear layer followed by a Tanh activation.
+   - **call_module**: The final linear layer `f2` with parameters `Linear(in=24, out=10)`.
+   - **output**: The final output tensor with shape `[1, 10]`.
+3. **Edges**:
+   - The input tensor `x` is passed to the first linear layer `f1`.
+   - The output of `f1` is passed to the activation function `a1`.
+   - The output of `a1` is passed to the first layer of the sequential block `b1`.
+   - The output of each layer in `b1` is passed to the next layer in the sequence.
+   - The output of the last layer in `b1` is passed to the final linear layer `f2`.
+   - The output of `f2` is the final output of the forward pass.
+
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [1,24]
+1 call_module f1 Linear(in=24,out=24,bias=True) [1,24]
+2 call_module a1 Tanh [] [1,24]
+3 call_module b1.0.0 Linear(in=24,out=24,bias=True) [1,24]
+4 call_module b1.0.1 Tanh [] [1,24]
+5 call_module b1.1.0 Linear(in=24,out=24,bias=True) [1,24]
+6 call_module b1.1.1 Tanh [] [1,24]
+7 call_module b1.2.0 Linear(in=24,out=24,bias=True) [1,24]
+8 call_module b1.2.1 Tanh [] [1,24]
+9 call_module f2 Linear(in=24,out=10,bias=True) [1,10]
+10 output output [1,10]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+8 -> 9 : arg0
+9 -> 10 : arg0

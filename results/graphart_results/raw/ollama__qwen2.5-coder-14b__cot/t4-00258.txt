@@ -1,0 +1,41 @@
+REASONING:
+1. **Input Placeholder**: The input tensor `x` is a placeholder with shape `[1, 8, 16]`.
+2. **LayerNorm (expand)**: The `expand` layer is a `LayerNorm` with `features=16`. It processes the input tensor.
+3. **MultiheadAttention (shrink)**: The `shrink` layer is a `MultiheadAttention` with `embed_dim=16` and `num_heads=2`. It takes three inputs (query, key, value) which are all the same tensor `x`.
+4. **Addition**: The output of `MultiheadAttention` (query) is added to the original input tensor `x`.
+5. **LayerNorm (encode)**: The `encode` layer is another `LayerNorm` with `features=16`. It processes the result of the addition.
+6. **Linear (body)**: The `body` layer is a `Linear` layer with `in_features=16` and `out_features=64`. It processes the result of the `LayerNorm`.
+7. **Sigmoid (stem)**: The `stem` layer is a `Sigmoid` activation function. It processes the result of the `Linear` layer.
+8. **Linear (neck)**: The `neck` layer is another `Linear` layer with `in_features=64` and `out_features=16`. It processes the result of the `Sigmoid`.
+9. **Addition**: The output of the `neck` layer is added to itself.
+10. **Output**: The final result is returned.
+
+GRAPH:
+```
+INPUTS 1
+NODES
+0 placeholder x [1,8,16]
+1 call_module expand LayerNorm(shape=[16]) [1,8,16]
+2 call_module shrink MultiheadAttention(embed_dim=16,num_heads=2,batch_first=True) [1,8,16]
+3 call_function add [1,8,16]
+4 call_module encode LayerNorm(shape=[16]) [1,8,16]
+5 call_module body Linear(in=16,out=64,bias=True) [1,8,64]
+6 call_module stem Sigmoid [1,8,64]
+7 call_module neck Linear(in=64,out=16,bias=True) [1,8,16]
+8 call_function add [1,8,16]
+9 output output [1,8,16]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+0 -> 2 : arg1
+0 -> 2 : arg2
+2 -> 3 : arg0
+0 -> 3 : arg1
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+8 -> 8 : arg1
+8 -> 9 : arg0
+```

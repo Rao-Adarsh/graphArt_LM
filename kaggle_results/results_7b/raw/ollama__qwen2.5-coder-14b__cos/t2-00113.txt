@@ -1,0 +1,47 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [2,32]
+h1 = self.fc1(x)             ->  n1  call_module fc1 Linear(in=32,out=32,bias=False) [2,32]    <- n0 arg0
+h2 = F.sigmoid(h1)           ->  n2  call_function sigmoid [2,32]                               <- n1 arg0
+h3 = self.stack1(h2)          ->  n3  call_module stack1 Sequential [2,32]                       <- n2 arg0
+  the Sequential holds 8 layers, so the body runs 8 times
+  h3 = self.stack1[0](h2)    ->  n4  call_module stack1.0 Linear(in=32,out=32,bias=False) [2,32]  <- n3 arg0
+  h3 = self.stack1[1](h3)    ->  n5  call_module stack1.1 Sigmoid [2,32]                          <- n4 arg0
+  h3 = self.stack1[2](h3)    ->  n6  call_module stack1.2 Linear(in=32,out=32,bias=False) [2,32]  <- n5 arg0
+  h3 = self.stack1[3](h3)    ->  n7  call_module stack1.3 Sigmoid [2,32]                          <- n6 arg0
+  h3 = self.stack1[4](h3)    ->  n8  call_module stack1.4 Linear(in=32,out=32,bias=False) [2,32]  <- n7 arg0
+  h3 = self.stack1[5](h3)    ->  n9  call_module stack1.5 Sigmoid [2,32]                          <- n8 arg0
+  h3 = self.stack1[6](h3)    ->  n10 call_module stack1.6 Linear(in=32,out=32,bias=False) [2,32]  <- n9 arg0
+  h3 = self.stack1[7](h3)    ->  n11 call_module stack1.7 Sigmoid [2,32]                          <- n10 arg0
+h4 = self.fc2(h3)             ->  n12 call_module fc2 Linear(in=32,out=2,bias=False) [2,2]      <- n11 arg0
+return h4                     ->  n13 output output [2,2]                                       <- n12 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [2,32]
+1 call_module fc1 Linear(in=32,out=32,bias=False) [2,32]
+2 call_function sigmoid [2,32]
+3 call_module stack1 Sequential [2,32]
+4 call_module stack1.0 Linear(in=32,out=32,bias=False) [2,32]
+5 call_module stack1.1 Sigmoid [2,32]
+6 call_module stack1.2 Linear(in=32,out=32,bias=False) [2,32]
+7 call_module stack1.3 Sigmoid [2,32]
+8 call_module stack1.4 Linear(in=32,out=32,bias=False) [2,32]
+9 call_module stack1.5 Sigmoid [2,32]
+10 call_module stack1.6 Linear(in=32,out=32,bias=False) [2,32]
+11 call_module stack1.7 Sigmoid [2,32]
+12 call_module fc2 Linear(in=32,out=2,bias=False) [2,2]
+13 output output [2,2]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+8 -> 9 : arg0
+9 -> 10 : arg0
+10 -> 11 : arg0
+11 -> 12 : arg0
+12 -> 13 : arg0

@@ -1,0 +1,37 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [2,32]
+h = self.fc_1(x)             ->  n1  call_module fc_1 Linear(in=32,out=32,bias=True) [2,32]    <- n0 arg0
+h = self.act_1(h)             ->  n2  call_module act_1 GELU [2,32]                             <- n1 arg0
+if self.extra_head:           ->  the attribute is False, so self.fc_2 never runs and gets no node
+p = self.fc_3(h)              ->  n3  call_module fc_3 Linear(in=32,out=32,bias=True) [2,32]    <- n2 arg0
+c = self.fc_4(h)              ->  n4  call_module fc_4 Linear(in=32,out=32,bias=True) [2,32]    <- n2 arg0
+right = self.fc_5(h)          ->  n5  call_module fc_5 Linear(in=32,out=32,bias=True) [2,32]    <- n2 arg0
+h = p + c                     ->  n6  call_function add [2,32]                                 <- n3 arg0, n4 arg1
+h = h + right                 ->  n7  call_function add [2,32]                                 <- n6 arg0, n5 arg1
+h = self.fc_6(h)              ->  n8  call_module fc_6 Linear(in=32,out=2,bias=True) [2,2]     <- n7 arg0
+return h                      ->  n9  output output [2,2]                                       <- n8 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [2,32]
+1 call_module fc_1 Linear(in=32,out=32,bias=True) [2,32]
+2 call_module act_1 GELU [2,32]
+3 call_module fc_3 Linear(in=32,out=32,bias=True) [2,32]
+4 call_module fc_4 Linear(in=32,out=32,bias=True) [2,32]
+5 call_module fc_5 Linear(in=32,out=32,bias=True) [2,32]
+6 call_function add [2,32]
+7 call_function add [2,32]
+8 call_module fc_6 Linear(in=32,out=2,bias=True) [2,2]
+9 output output [2,2]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+2 -> 4 : arg0
+2 -> 5 : arg0
+3 -> 6 : arg0
+4 -> 6 : arg1
+6 -> 7 : arg0
+5 -> 7 : arg1
+7 -> 8 : arg0
+8 -> 9 : arg0

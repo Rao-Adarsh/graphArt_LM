@@ -1,0 +1,10 @@
+{
+  "backend": "ollama",
+  "model": "qwen2.5-coder:14b",
+  "prompt": "cos",
+  "split": "test",
+  "effort": "high",
+  "n": 40,
+  "cached": 40,
+  "failed": 0
+}

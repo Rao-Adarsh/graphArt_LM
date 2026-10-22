@@ -13,8 +13,18 @@ Rules
     <id> <op> <target> [<Class>(<params>)] [<shape>]
   * <target> is the attribute path for call_module (fc1, blocks.0, layer1.0.conv1),
     and the normalised function name otherwise (add, cat, relu, gelu, view).
-  * <Class>(<params>) appears for call_module only, with named parameters:
-    Linear(in=8,out=16,bias=True), Conv2d(in=3,out=16,k=3,s=1,p=1).
+  * <Class>(<params>) appears for call_module only. Write exactly these parameters,
+    named this way, and no others; a layer with no parameters is the bare class name:
+      Linear(in=8,out=16,bias=True)        Conv2d(in=3,out=16,k=3,s=1,p=1)
+      BatchNorm2d(features=16)             LayerNorm(shape=[32])
+      MaxPool2d(k=2,s=2)                   AdaptiveAvgPool2d(out=1)
+      Flatten(start=1,end=-1)              Dropout(p=0.1)
+      Embedding(num=100,dim=16)            ReLU   GELU   SiLU   Sigmoid   Tanh
+    Every Conv/ConvTranspose takes in,out,k,s,p (and g only when groups is not 1),
+    never bias. BatchNorm and GroupNorm take features. MaxPool/AvgPool take k,s.
+    AdaptiveAvgPool/AdaptiveMaxPool take out. A layer not listed here, such as
+    MultiheadAttention or Upsample, is the bare class name. A list value is bracketed
+    and joined with x: k=[3x5].
   * <shape> is that node's output shape in square brackets, e.g. [2,16].
     The shape going in is given by example_input at the bottom of the source.
 - Function names are normalised: `x + y`, torch.add(x, y) and x.add(y) are all `add`;

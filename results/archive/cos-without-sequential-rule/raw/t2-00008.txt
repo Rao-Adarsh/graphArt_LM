@@ -1,0 +1,29 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [2,24]
+x = self.fc1(x)               ->  n1  call_module fc1 Linear(in=24,out=24,bias=True) [2,24]   <- n0 arg0
+x = self.act1(x)              ->  n2  call_module act1 Sigmoid [2,24]                        <- n1 arg0
+x = self.stack1(x)            ->  n3  call_module stack1 Sequential [2,24]                   <- n2 arg0
+      the Sequential has 6 layers, so the body runs 6 times
+      1st layer: Linear(in=24,out=24,bias=True)
+      2nd layer: Sigmoid
+      3rd layer: Linear(in=24,out=24,bias=True)
+      4th layer: Sigmoid
+      5th layer: Linear(in=24,out=24,bias=True)
+      6th layer: Sigmoid
+x = self.fc2(x)               ->  n4  call_module fc2 Linear(in=24,out=4,bias=True) [2,4]    <- n3 arg0
+return x                      ->  n5  output output [2,4]                                     <- n4 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [2,24]
+1 call_module fc1 Linear(in=24,out=24,bias=True) [2,24]
+2 call_module act1 Sigmoid [2,24]
+3 call_module stack1 Sequential [2,24]
+4 call_module fc2 Linear(in=24,out=4,bias=True) [2,4]
+5 output output [2,4]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0

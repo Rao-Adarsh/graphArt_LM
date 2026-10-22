@@ -1,0 +1,26 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [1,32]
+h = self.fc1(x)               ->  n1  call_module fc1 Linear(in=32,out=32,bias=True) [1,32]    <- n0 arg0
+h = self.act1(h)              ->  n2  call_module act1 Tanh [1,32]                              <- n1 arg0
+h = self.block1(h)            ->  the Sequential holds 2 layers, so the body runs twice
+  h = blk(h)  [block1.0]     ->  n3  call_module block1.0 Linear(in=32,out=32,bias=True) [1,32]  <- n2 arg0
+  h = blk(h)  [block1.1]     ->  n4  call_module block1.1 Linear(in=32,out=32,bias=True) [1,32]  <- n3 arg0
+h = self.fc2(h)               ->  n5  call_module fc2 Linear(in=32,out=10,bias=True) [1,10]     <- n4 arg0
+return h                      ->  n6  output output [1,10]                                       <- n5 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [1,32]
+1 call_module fc1 Linear(in=32,out=32,bias=True) [1,32]
+2 call_module act1 Tanh [1,32]
+3 call_module block1.0 Linear(in=32,out=32,bias=True) [1,32]
+4 call_module block1.1 Linear(in=32,out=32,bias=True) [1,32]
+5 call_module fc2 Linear(in=32,out=10,bias=True) [1,10]
+6 output output [1,10]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0

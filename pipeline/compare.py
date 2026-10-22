@@ -70,27 +70,28 @@ def main() -> None:
               else (lambda r: r["model"]))
 
     if args.markdown:
-        head = ["model", "prompt", "n", "parsed", "valid", "**exact**"] + \
+        head = ["model", "prompt", "n", "parsed", "valid", "**exact**", "topo"] + \
                [f"t{t} exact" for t in all_tiers]
         print("| " + " | ".join(head) + " |")
         print("|" + "|".join(["---"] * len(head)) + "|")
         for r in runs:
             o = r["overall"]
             cells = [f"`{r['model']}`", r["prompt"], str(o["n"]), _flat(o["parsed"]),
-                     _flat(o["valid"]), f"**{_flat(o['exact'])}**"] + \
+                     _flat(o["valid"]), f"**{_flat(o['exact'])}**", _flat(o["exact_topo"])] + \
                     [_flat(r["tiers"].get(t)) for t in all_tiers]
             print("| " + " | ".join(cells) + " |")
     else:
         header = (f"{'model':<40}{'prompt':<12}{'n':>5}{'parsed':>8}{'valid':>7}"
-                  f"{'exact':>7}" + "".join(f"{'t' + str(t):>7}" for t in all_tiers))
+                  f"{'exact':>7}{'topo':>7}" + "".join(f"{'t' + str(t):>7}" for t in all_tiers))
         print(header)
         print("-" * len(header))
         for r in runs:
             o = r["overall"]
             print(f"{r['model'][:39]:<40}{r['prompt'][:11]:<12}{o['n']:>5} {_cell(o['parsed'])}"
-                  f" {_cell(o['valid'])} {_cell(o['exact'])}"
+                  f" {_cell(o['valid'])} {_cell(o['exact'])} {_cell(o['exact_topo'])}"
                   + "".join(f" {_cell(r['tiers'].get(t))}" for t in all_tiers))
-        print("\ntier columns are `exact`; t1 flat, t2 loops, t3 branches, t4 blocks")
+        print("\ntier columns are `exact`; t1 flat, t2 loops, t3 branches, t4 blocks;"
+              " topo = exact ignoring module parameters and function-vs-method spelling")
 
     out = ROOT / "results" / "comparison.json"
     out.write_text(json.dumps(runs, indent=2), encoding="utf-8")

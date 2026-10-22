@@ -1,0 +1,46 @@
+REASONING:
+1. **Input Placeholder**: The input tensor `x` is a placeholder with shape `[1, 3, 32, 32]`.
+2. **Conv2d (head)**: The first convolutional layer `head` processes the input tensor. It has 3 input channels, 12 output channels, a kernel size of 3, and padding of 1. The output shape is `[1, 12, 32, 32]`.
+3. **BatchNorm2d (gate)**: The batch normalization layer `gate` normalizes the output of the first convolutional layer. The output shape remains `[1, 12, 32, 32]`.
+4. **Tanh Activation**: The tanh activation function is applied to the output of the batch normalization layer. The output shape remains `[1, 12, 32, 32]`.
+5. **Conv2d (tail)**: The second convolutional layer `tail` processes the output of the tanh activation. It has 12 input channels, 48 output channels, a kernel size of 3, and padding of 1. The output shape is `[1, 48, 32, 32]`.
+6. **Tanh Activation**: The tanh activation function is applied to the output of the second convolutional layer. The output shape remains `[1, 48, 32, 32]`.
+7. **Conv2d (proj)**: The third convolutional layer `proj` processes the output of the second tanh activation. It has 48 input channels, 24 output channels, a kernel size of 3, and padding of 1. The output shape is `[1, 24, 32, 32]`.
+8. **BatchNorm2d (neck)**: The batch normalization layer `neck` normalizes the output of the third convolutional layer. The output shape remains `[1, 24, 32, 32]`.
+9. **Tanh Activation**: The tanh activation function is applied to the output of the batch normalization layer. The output shape remains `[1, 24, 32, 32]`.
+10. **AdaptiveAvgPool2d (merge)**: The adaptive average pooling layer `merge` reduces the spatial dimensions to 1x1. The output shape is `[1, 24, 1, 1]`.
+11. **Flatten (encode)**: The flatten layer `encode` converts the tensor from 4D to 2D. The output shape is `[1, 24]`.
+12. **Linear (stem)**: The fully connected layer `stem` processes the flattened tensor. It has 24 input features and 2 output features. The output shape is `[1, 2]`.
+13. **Output**: The final output tensor is returned.
+
+GRAPH:
+```
+INPUTS 1
+NODES
+0 placeholder x [1,3,32,32]
+1 call_module head Conv2d(in=3,out=12,k=3,s=1,p=1) [1,12,32,32]
+2 call_module gate BatchNorm2d(features=12) [1,12,32,32]
+3 call_function tanh [] [1,12,32,32]
+4 call_module tail Conv2d(in=12,out=48,k=3,s=1,p=1) [1,48,32,32]
+5 call_function tanh [] [1,48,32,32]
+6 call_module proj Conv2d(in=48,out=24,k=3,s=1,p=1) [1,24,32,32]
+7 call_module neck BatchNorm2d(features=24) [1,24,32,32]
+8 call_function tanh [] [1,24,32,32]
+9 call_module merge AdaptiveAvgPool2d(out=1) [1,24,1,1]
+10 call_module encode Flatten(start=1,end=-1) [1,24]
+11 call_module stem Linear(in=24,out=2,bias=True) [1,2]
+12 output output [1,2]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+8 -> 9 : arg0
+9 -> 10 : arg0
+10 -> 11 : arg0
+11 -> 12 : arg0
+```

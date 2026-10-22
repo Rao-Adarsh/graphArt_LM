@@ -1,0 +1,20 @@
+INPUTS 1
+NODES
+0 placeholder x [2,32]
+1 call_module fc1 Linear(in=32,out=32,bias=True) [2,32]
+2 call_module act1 Tanh [2,32]
+3 call_module stack1.0 Linear(in=32,out=32,bias=True) [2,32]
+4 call_module stack1.1 Tanh [2,32]
+5 call_module stack1.2 Linear(in=32,out=32,bias=True) [2,32]
+6 call_module stack1.3 Tanh [2,32]
+7 call_module fc2 Linear(in=32,out=2,bias=True) [2,2]
+8 output output [2,2]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0

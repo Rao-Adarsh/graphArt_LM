@@ -1,0 +1,12 @@
+INPUTS 1
+NODES
+0 placeholder x [2,16]
+1 call_module fc_1 Linear(in=16,out=16,bias=True) [2,16]
+2 call_function gelu [2,16]
+3 call_module blocks_1.0 Linear(in=16,out=16,bias=True) [2,16]
+4 call_module blocks_1.1 Linear(in=16,out=16,bias=True) [2,16]
+5 call_module blocks_1.2 Linear(in=16,out=16,bias=True) [2,16]
+6 call_module blocks_1.3 Linear(in=16,out=16,bias=True) [2,16]
+7 call_function gelu [2,16]
+8 call_module fc_2 Linear(in=16,out=4,bias=True) [2,4]
+9 output output [2,4]

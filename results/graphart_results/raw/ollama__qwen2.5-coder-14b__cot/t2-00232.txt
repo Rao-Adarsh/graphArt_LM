@@ -1,0 +1,47 @@
+REASONING:
+1. **Inputs**: The input to the forward pass is a tensor `x` with shape `[1, 16]`.
+2. **Nodes**:
+   - `placeholder x [1, 16]`: Placeholder for the input tensor `x`.
+   - `call_module post Linear(in=16,out=16,bias=True) [1, 16]`: The first linear layer `post` processes the input tensor.
+   - `call_function silu [1, 16]`: The SiLU activation function is applied to the output of the `post` layer.
+   - `call_module shrink.0 Linear(in=16,out=16,bias=True) [1, 16]`: The first layer in the `shrink` ModuleList processes the output of the SiLU activation.
+   - `call_module shrink.1 Linear(in=16,out=16,bias=True) [1, 16]`: The second layer in the `shrink` ModuleList processes the output of the previous layer.
+   - `call_module shrink.2 Linear(in=16,out=16,bias=True) [1, 16]`: The third layer in the `shrink` ModuleList processes the output of the previous layer.
+   - `call_module shrink.3 Linear(in=16,out=16,bias=True) [1, 16]`: The fourth layer in the `shrink` ModuleList processes the output of the previous layer.
+   - `call_function silu [1, 16]`: The SiLU activation function is applied to the output of the last layer in the `shrink` ModuleList.
+   - `call_module merge Linear(in=16,out=10,bias=True) [1, 10]`: The final linear layer `merge` processes the output of the last SiLU activation.
+   - `output output [1, 10]`: The final output of the forward pass.
+3. **Edges**:
+   - `0 -> 1 : arg0`: The input tensor `x` is passed to the `post` layer.
+   - `1 -> 2 : arg0`: The output of the `post` layer is passed to the SiLU activation function.
+   - `2 -> 3 : arg0`: The output of the SiLU activation function is passed to the first layer in the `shrink` ModuleList.
+   - `3 -> 4 : arg0`: The output of the first layer in the `shrink` ModuleList is passed to the second layer in the `shrink` ModuleList.
+   - `4 -> 5 : arg0`: The output of the second layer in the `shrink` ModuleList is passed to the third layer in the `shrink` ModuleList.
+   - `5 -> 6 : arg0`: The output of the third layer in the `shrink` ModuleList is passed to the fourth layer in the `shrink` ModuleList.
+   - `6 -> 7 : arg0`: The output of the fourth layer in the `shrink` ModuleList is passed to the SiLU activation function.
+   - `7 -> 8 : arg0`: The output of the last SiLU activation function is passed to the `merge` layer.
+   - `8 -> 9 : arg0`: The output of the `merge` layer is the final output of the forward pass.
+
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [1,16]
+1 call_module post Linear(in=16,out=16,bias=True) [1,16]
+2 call_function silu [1,16]
+3 call_module shrink.0 Linear(in=16,out=16,bias=True) [1,16]
+4 call_module shrink.1 Linear(in=16,out=16,bias=True) [1,16]
+5 call_module shrink.2 Linear(in=16,out=16,bias=True) [1,16]
+6 call_module shrink.3 Linear(in=16,out=16,bias=True) [1,16]
+7 call_function silu [1,16]
+8 call_module merge Linear(in=16,out=10,bias=True) [1,10]
+9 output output [1,10]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+8 -> 9 : arg0

@@ -1,0 +1,20 @@
+INPUTS 1
+NODES
+0 placeholder x [2,16]
+1 call_module fc_1 Linear(in=16,out=16,bias=True) [2,16]
+2 call_function tanh [2,16]
+3 call_module fc_2 Linear(in=16,out=16,bias=True) [2,16]
+4 call_module fc_3 Linear(in=16,out=16,bias=True) [2,16]
+5 call_module fc_4 Linear(in=16,out=16,bias=True) [2,16]
+6 call_module fc_5 Linear(in=16,out=16,bias=True) [2,16]
+7 call_module fc_6 Linear(in=16,out=4,bias=True) [2,4]
+8 output output [2,4]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0

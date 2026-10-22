@@ -1,0 +1,22 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [1,24]
+x = self.f1(x)                ->  n1  call_module f1 Linear(in=24,out=24,bias=True) [1,24]   <- n0 arg0
+x = self.a1(x)                ->  n2  call_module a1 Tanh [] [1,24]                          <- n1 arg0
+x = self.b1(x)                ->  n3  call_module b1 Sequential [] [1,24]                    <- n2 arg0
+x = self.f2(x)                ->  n4  call_module f2 Linear(in=24,out=10,bias=True) [1,10]   <- n3 arg0
+return x                      ->  n5  output output [1,10]                                    <- n4 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [1,24]
+1 call_module f1 Linear(in=24,out=24,bias=True) [1,24]
+2 call_module a1 Tanh [] [1,24]
+3 call_module b1 Sequential [] [1,24]
+4 call_module f2 Linear(in=24,out=10,bias=True) [1,10]
+5 output output [1,10]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0

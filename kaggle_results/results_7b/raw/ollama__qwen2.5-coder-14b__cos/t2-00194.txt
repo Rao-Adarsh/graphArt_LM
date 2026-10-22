@@ -1,0 +1,32 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [2,16]
+h = self.fc_1(x)             ->  n1  call_module fc_1 Linear(in=16,out=16,bias=True) [2,16]    <- n0 arg0
+h = self.act_1(h)             ->  n2  call_module act_1 SiLU [] [2,16]                          <- n1 arg0
+h = self.block_1(h)           ->  the Sequential holds 4 layers, so the body runs 4 times
+  h = blk(h)  [block_1.0]    ->  n3  call_module block_1.0 Linear(in=16,out=16,bias=True) [2,16]  <- n2 arg0
+  h = blk(h)  [block_1.1]    ->  n4  call_module block_1.1 Linear(in=16,out=16,bias=True) [2,16]  <- n3 arg0
+  h = blk(h)  [block_1.2]    ->  n5  call_module block_1.2 Linear(in=16,out=16,bias=True) [2,16]  <- n4 arg0
+  h = blk(h)  [block_1.3]    ->  n6  call_module block_1.3 Linear(in=16,out=16,bias=True) [2,16]  <- n5 arg0
+h = self.fc_2(h)             ->  n7  call_module fc_2 Linear(in=16,out=2,bias=True) [2,2]       <- n6 arg0
+return h                      ->  n8  output output [2,2]                                       <- n7 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [2,16]
+1 call_module fc_1 Linear(in=16,out=16,bias=True) [2,16]
+2 call_module act_1 SiLU [] [2,16]
+3 call_module block_1.0 Linear(in=16,out=16,bias=True) [2,16]
+4 call_module block_1.1 Linear(in=16,out=16,bias=True) [2,16]
+5 call_module block_1.2 Linear(in=16,out=16,bias=True) [2,16]
+6 call_module block_1.3 Linear(in=16,out=16,bias=True) [2,16]
+7 call_module fc_2 Linear(in=16,out=2,bias=True) [2,2]
+8 output output [2,2]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0

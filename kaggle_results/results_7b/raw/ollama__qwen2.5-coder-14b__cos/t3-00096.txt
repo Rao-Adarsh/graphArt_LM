@@ -1,0 +1,46 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [1,24]
+h1 = self.f1(x)             ->  n1  call_module f1 Linear(in=24,out=24,bias=False) [1,24]    <- n0 arg0
+h2 = self.a1(h1)              ->  n2  call_module a1 Tanh []                                  <- n1 arg0
+u = self.f2(h2)              ->  n3  call_module f2 Linear(in=24,out=24,bias=False) [1,24]     <- n2 arg0
+p = self.f3(h2)              ->  n4  call_module f3 Linear(in=24,out=24,bias=False) [1,24]  <- n2 arg0
+v = self.f4(h2)              ->  n5  call_module f4 Linear(in=24,out=24,bias=False) [1,24]  <- n2 arg0
+h3 = u + p                   ->  n6  call_function add [1,24]                                <- n3 arg0, n4 arg1
+h4 = h3 + v                  ->  n7  call_function add [1,24]                                <- n6 arg0, n5 arg1
+h5 = self.f5(h4)             ->  n8  call_module f5 Linear(in=24,out=24,bias=False) [1,24]     <- n7 arg0
+h6 = self.a1(h5)              ->  n9  call_module a1 Tanh []                                  <- n8 arg0
+h7 = h6 + h4                 -> n10  call_function add [1,24]                                <- n9 arg0, n7 arg1
+h8 = self.f6(h7)             -> n11  call_module f6 Linear(in=24,out=10,bias=False) [1,10]     <- n10 arg0
+return h8                    -> n12  output output [1,10]                                    <- n11 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [1,24]
+1 call_module f1 Linear(in=24,out=24,bias=False) [1,24]
+2 call_module a1 Tanh [] 
+3 call_module f2 Linear(in=24,out=24,bias=False) [1,24]
+4 call_module f3 Linear(in=24,out=24,bias=False) [1,24]
+5 call_module f4 Linear(in=24,out=24,bias=False) [1,24]
+6 call_function add [1,24]
+7 call_function add [1,24]
+8 call_module f5 Linear(in=24,out=24,bias=False) [1,24]
+9 call_module a1 Tanh [] 
+10 call_function add [1,24]
+11 call_module f6 Linear(in=24,out=10,bias=False) [1,10]
+12 output output [1,10]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+2 -> 4 : arg0
+2 -> 5 : arg0
+3 -> 6 : arg0
+4 -> 6 : arg1
+6 -> 7 : arg0
+5 -> 7 : arg1
+7 -> 8 : arg0
+8 -> 9 : arg0
+9 -> 10 : arg0
+7 -> 10 : arg1
+10 -> 11 : arg0
+11 -> 12 : arg0

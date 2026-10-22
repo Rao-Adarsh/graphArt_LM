@@ -1,0 +1,38 @@
+REASONING:
+1. **Input Placeholder**: The input tensor `x` is a placeholder with shape `[1, 3, 16, 16]`.
+2. **Convolutional Layers**:
+   - `conv1`: Applies a 2D convolution with 3 input channels, 32 output channels, kernel size 3, and padding 1.
+   - `conv2`: Applies a 2D convolution with 32 input channels, 48 output channels, kernel size 5, and padding 2.
+3. **Activation Functions**:
+   - `tanh`: Applies the hyperbolic tangent activation function to the output of each convolutional layer.
+4. **Pooling Layer**:
+   - `pool1`: Applies adaptive average pooling to reduce the spatial dimensions to 1x1.
+5. **Flattening Layer**:
+   - `flat1`: Flattens the tensor to a 1D vector.
+6. **Fully Connected Layer**:
+   - `fc1`: Applies a linear transformation to the flattened tensor with 48 input features and 2 output features.
+7. **Output**: The final output tensor is returned.
+
+GRAPH:
+```
+INPUTS 1
+NODES
+0 placeholder x [1,3,16,16]
+1 call_module conv1 Conv2d(in=3,out=32,k=3,s=1,p=1) [1,32,16,16]
+2 call_function tanh [1,32,16,16]
+3 call_module conv2 Conv2d(in=32,out=48,k=5,s=1,p=2) [1,48,16,16]
+4 call_function tanh [1,48,16,16]
+5 call_module pool1 AdaptiveAvgPool2d(out=1) [1,48,1,1]
+6 call_module flat1 Flatten(start=1,end=-1) [1,48]
+7 call_module fc1 Linear(in=48,out=2,bias=True) [1,2]
+8 output output [1,2]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+```

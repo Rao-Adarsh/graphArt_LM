@@ -1,0 +1,39 @@
+REASONING:
+1. **Inputs**: The input to the forward pass is a tensor `x` with shape `[2, 16]`.
+2. **fc_1**: The first linear layer `fc_1` takes the input `x` and transforms it to shape `[2, 16]`.
+3. **act_1**: The SiLU activation function is applied to the output of `fc_1`.
+4. **block_1**: This is a `nn.Sequential` containing 4 identical sub-sequences. Each sub-sequence consists of a linear layer followed by a SiLU activation function.
+5. **fc_2**: The final linear layer `fc_2` takes the output of `block_1` and transforms it to shape `[2, 2]`.
+6. **Output**: The final output is returned.
+
+GRAPH:
+```
+INPUTS 1
+NODES
+0 placeholder x [2,16]
+1 call_module fc_1 Linear(in=16,out=16,bias=True) [2,16]
+2 call_module act_1 SiLU [] [2,16]
+3 call_module block_1.0.0 Linear(in=16,out=16,bias=True) [2,16]
+4 call_module block_1.0.1 SiLU [] [2,16]
+5 call_module block_1.1.0 Linear(in=16,out=16,bias=True) [2,16]
+6 call_module block_1.1.1 SiLU [] [2,16]
+7 call_module block_1.2.0 Linear(in=16,out=16,bias=True) [2,16]
+8 call_module block_1.2.1 SiLU [] [2,16]
+9 call_module block_1.3.0 Linear(in=16,out=16,bias=True) [2,16]
+10 call_module block_1.3.1 SiLU [] [2,16]
+11 call_module fc_2 Linear(in=16,out=2,bias=True) [2,2]
+12 output output [2,2]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+8 -> 9 : arg0
+9 -> 10 : arg0
+10 -> 11 : arg0
+11 -> 12 : arg0
+```

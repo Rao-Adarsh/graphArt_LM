@@ -1,0 +1,36 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [1,8,16]
+h1 = self.n1(x)               ->  n1  call_module n1 LayerNorm(shape=[16]) [1,8,16]   <- n0 arg0
+v, c = self.a1(h1, h1, h1)    ->  n2  call_module a1 MultiheadAttention(16, 1, batch_first=True) [1,8,16]  <- n1 arg0, n1 arg1, n1 arg2
+h2 = v + x                    ->  n3  call_function add [1,8,16]                      <- n2 arg0, n0 arg0
+h3 = self.n2(h2)              ->  n4  call_module n2 LayerNorm(shape=[16]) [1,8,16]   <- n3 arg0
+h4 = self.f1(h3)              ->  n5  call_module f1 Linear(in=16,out=32,bias=True) [1,8,32]  <- n4 arg0
+h5 = F.gelu(h4)               ->  n6  call_function gelu [1,8,32]                      <- n5 arg0
+h6 = self.f2(h5)              ->  n7  call_module f2 Linear(in=32,out=16,bias=True) [1,8,16]  <- n6 arg0
+h7 = h6 + h2                  ->  n8  call_function add [1,8,16]                      <- n7 arg0, n3 arg0
+return h7                     ->  n9  output output [1,8,16]                          <- n8 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [1,8,16]
+1 call_module n1 LayerNorm(shape=[16]) [1,8,16]
+2 call_module a1 MultiheadAttention(16, 1, batch_first=True) [1,8,16]
+3 call_function add [1,8,16]
+4 call_module n2 LayerNorm(shape=[16]) [1,8,16]
+5 call_module f1 Linear(in=16,out=32,bias=True) [1,8,32]
+6 call_function gelu [1,8,32]
+7 call_module f2 Linear(in=32,out=16,bias=True) [1,8,16]
+8 call_function add [1,8,16]
+9 output output [1,8,16]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0, arg1, arg2
+2 -> 3 : arg0
+0 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+3 -> 8 : arg0
+8 -> 9 : arg0

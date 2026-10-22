@@ -1,0 +1,15 @@
+INPUTS 1
+NODES
+0 placeholder x [2,16]
+1 call_module layer1 Linear(in=16,out=16,bias=True) [2,16]
+2 call_function silu [2,16]
+3 call_module layer3 Linear(in=16,out=16,bias=True) [2,16]
+4 call_function silu [2,16]
+5 call_function add [2,16]
+6 call_module layer4 Linear(in=16,out=16,bias=True) [2,16]
+7 call_module layer5 Linear(in=16,out=16,bias=True) [2,16]
+8 call_function add [2,16]
+9 call_module layer6 Linear(in=16,out=16,bias=True) [2,16]
+10 call_function add [2,16]
+11 call_module layer7 Linear(in=16,out=2,bias=True) [2,2]
+12 output output [2,2]

@@ -1,0 +1,22 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [2,16]
+x = self.fc1(x)               ->  n1  call_module fc1 Linear(in=16,out=16,bias=True) [2,16]   <- n0 arg0
+x = torch.sigmoid(x)          ->  n2  call_function sigmoid [2,16]                            <- n1 arg0
+x = self.stack1(x)            ->  n3  call_module stack1 Sequential [2,16]                    <- n2 arg0
+x = self.fc2(x)               ->  n4  call_module fc2 Linear(in=16,out=10,bias=True) [2,10]  <- n3 arg0
+return x                      ->  n5  output output [2,10]                                    <- n4 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [2,16]
+1 call_module fc1 Linear(in=16,out=16,bias=True) [2,16]
+2 call_function sigmoid [2,16]
+3 call_module stack1 Sequential [2,16]
+4 call_module fc2 Linear(in=16,out=10,bias=True) [2,10]
+5 output output [2,10]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0

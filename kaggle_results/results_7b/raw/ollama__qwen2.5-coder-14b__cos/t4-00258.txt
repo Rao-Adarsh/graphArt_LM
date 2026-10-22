@@ -1,0 +1,34 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [1,8,16]
+x = self.expand(x)            ->  n1  call_module expand LayerNorm(shape=[16]) [1,8,16]   <- n0 arg0
+q, a = self.shrink(x, x, x)   ->  n2  call_module shrink MultiheadAttention(16, 2, batch_first=True) [1,8,16]  <- n1 arg0, n1 arg1, n1 arg2
+x = q + x                     ->  n3  call_function add [1,8,16]                                 <- n2 arg0, n1 arg0
+x = self.encode(x)            ->  n4  call_module encode LayerNorm(shape=[16]) [1,8,16]   <- n3 arg0
+x = self.body(x)               ->  n5  call_module body Linear(in=16,out=64,bias=True) [1,8,64]  <- n4 arg0
+x = self.stem(x)               ->  n6  call_module stem Sigmoid [1,8,64]                        <- n5 arg0
+x = self.neck(x)               ->  n7  call_module neck Linear(in=64,out=16,bias=True) [1,8,16]  <- n6 arg0
+x = x + x                     ->  n8  call_function add [1,8,16]                                 <- n7 arg0, n7 arg0
+return x                      ->  n9  output output [1,8,16]                                       <- n8 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [1,8,16]
+1 call_module expand LayerNorm(shape=[16]) [1,8,16]
+2 call_module shrink MultiheadAttention(16, 2, batch_first=True) [1,8,16]
+3 call_function add [1,8,16]
+4 call_module encode LayerNorm(shape=[16]) [1,8,16]
+5 call_module body Linear(in=16,out=64,bias=True) [1,8,64]
+6 call_module stem Sigmoid [1,8,64]
+7 call_module neck Linear(in=64,out=16,bias=True) [1,8,16]
+8 call_function add [1,8,16]
+9 output output [1,8,16]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0, arg1, arg2
+2 -> 3 : arg0, arg1
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0, arg1
+8 -> 9 : arg0

@@ -1,0 +1,39 @@
+REASONING:
+1. **Initialization**: The `Backbone` class is initialized with several linear layers (`fc1`, `fc2`, `fc3`, `fc4`, `fc5`, `fc6`) and a boolean attribute `wide` set to `False`.
+2. **Forward Pass**:
+   - The input `x` is passed through `fc1`.
+   - The output of `fc1` is passed through a sigmoid activation function.
+   - Since `wide` is `False`, the `if` block is skipped, and the code proceeds to `fc3`.
+   - The output of `fc3` is passed through another sigmoid activation function.
+   - The output of the second `fc3` is passed through `fc4` and `fc5` to produce `p` and `a` respectively.
+   - `p` and `a` are concatenated along dimension 1.
+   - The concatenated result is passed through `fc6`.
+
+GRAPH:
+```
+INPUTS 1
+NODES
+0 placeholder x [2,16]
+1 call_module fc1 Linear(in=16,out=16,bias=True) [2,16]
+2 call_function sigmoid [2,16]
+3 call_module fc3 Linear(in=16,out=16,bias=True) [2,16]
+4 call_function sigmoid [2,16]
+5 call_module fc3 Linear(in=16,out=16,bias=True) [2,16]
+6 call_module fc4 Linear(in=16,out=8,bias=True) [2,8]
+7 call_module fc5 Linear(in=16,out=8,bias=True) [2,8]
+8 call_function cat [2,16]
+9 call_module fc6 Linear(in=16,out=4,bias=True) [2,4]
+10 output output [2,4]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+5 -> 7 : arg0
+6 -> 8 : arg0
+7 -> 8 : arg1
+8 -> 9 : arg0
+9 -> 10 : arg0
+```

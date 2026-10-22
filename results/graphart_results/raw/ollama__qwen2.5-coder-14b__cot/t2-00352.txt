@@ -1,0 +1,41 @@
+REASONING:
+1. **Inputs**: The input to the forward pass is a tensor `x` with shape `[2, 16]`.
+2. **Nodes**:
+   - **Placeholder**: The input tensor `x` is a placeholder.
+   - **call_module**: The first linear layer `fc_1` with parameters `in=16, out=16`.
+   - **call_function**: The GELU activation function.
+   - **call_module**: Four linear layers in `blocks_1`, each with parameters `in=16, out=16`.
+   - **call_function**: Another GELU activation function.
+   - **call_module**: The final linear layer `fc_2` with parameters `in=16, out=4`.
+   - **output**: The final output tensor.
+3. **Edges**:
+   - The input tensor `x` is passed to the first linear layer `fc_1`.
+   - The output of `fc_1` is passed to the GELU activation function.
+   - The output of the GELU function is passed to each of the four linear layers in `blocks_1` sequentially.
+   - The output of the last linear layer in `blocks_1` is passed to the second GELU activation function.
+   - The output of the second GELU function is passed to the final linear layer `fc_2`.
+   - The output of `fc_2` is the final output of the model.
+
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [2,16]
+1 call_module fc_1 Linear(in=16,out=16,bias=True) [2,16]
+2 call_function gelu [2,16]
+3 call_module blocks_1.0 Linear(in=16,out=16,bias=True) [2,16]
+4 call_module blocks_1.1 Linear(in=16,out=16,bias=True) [2,16]
+5 call_module blocks_1.2 Linear(in=16,out=16,bias=True) [2,16]
+6 call_module blocks_1.3 Linear(in=16,out=16,bias=True) [2,16]
+7 call_function gelu [2,16]
+8 call_module fc_2 Linear(in=16,out=4,bias=True) [2,4]
+9 output output [2,4]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+8 -> 9 : arg0

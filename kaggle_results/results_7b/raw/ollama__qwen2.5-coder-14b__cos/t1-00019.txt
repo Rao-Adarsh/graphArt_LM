@@ -1,0 +1,37 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [1,16]
+x = self.tail(x)              ->  n1  call_module tail Linear(in=16,out=16,bias=False) [1,16]    <- n0 arg0
+x = self.merge(x)             ->  n2  call_module merge Tanh []                                <- n1 arg0
+x = self.proj(x)              ->  n3  call_module proj Linear(in=16,out=16,bias=False) [1,16]    <- n2 arg0
+x = self.encode(x)            ->  n4  call_module encode Tanh []                                <- n3 arg0
+x = self.neck(x)              ->  n5  call_module neck Linear(in=16,out=64,bias=False) [1,64]    <- n4 arg0
+x = self.mix(x)               ->  n6  call_module mix Tanh []                                   <- n5 arg0
+x = self.stem(x)              ->  n7  call_module stem Linear(in=64,out=64,bias=False) [1,64]    <- n6 arg0
+x = self.body(x)              ->  n8  call_module body Tanh []                                   <- n7 arg0
+x = self.head(x)              ->  n9  call_module head Linear(in=64,out=10,bias=False) [1,10]    <- n8 arg0
+return x                     ->  n10 output output [1,10]                                       <- n9 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [1,16]
+1 call_module tail Linear(in=16,out=16,bias=False) [1,16]
+2 call_module merge Tanh [] 
+3 call_module proj Linear(in=16,out=16,bias=False) [1,16]
+4 call_module encode Tanh [] 
+5 call_module neck Linear(in=16,out=64,bias=False) [1,64]
+6 call_module mix Tanh [] 
+7 call_module stem Linear(in=64,out=64,bias=False) [1,64]
+8 call_module body Tanh [] 
+9 call_module head Linear(in=64,out=10,bias=False) [1,10]
+10 output output [1,10]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+8 -> 9 : arg0
+9 -> 10 : arg0

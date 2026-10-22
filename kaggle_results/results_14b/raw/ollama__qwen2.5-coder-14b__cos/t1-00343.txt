@@ -1,0 +1,34 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [1,3,32,32]
+h = self.conv1(x)             ->  n1  call_module conv1 Conv2d(in=3,out=8,k=5,s=1,p=2) [1,8,32,32]  <- n0 arg0
+h = self.bn1(h)               ->  n2  call_module bn1 BatchNorm2d(features=8) [1,8,32,32]         <- n1 arg0
+h = self.act1(h)              ->  n3  call_module act1 Sigmoid [] [1,8,32,32]                    <- n2 arg0
+h = self.conv2(h)             ->  n4  call_module conv2 Conv2d(in=8,out=32,k=3,s=1,p=1) [1,32,32,32] <- n3 arg0
+h = self.act2(h)              ->  n5  call_module act2 Sigmoid [] [1,32,32,32]                   <- n4 arg0
+h = self.pool1(h)             ->  n6  call_module pool1 AdaptiveAvgPool2d(out=1) [1,32,1,1]        <- n5 arg0
+h = self.flat1(h)             ->  n7  call_module flat1 Flatten(start=1,end=-1) [1,32]            <- n6 arg0
+h = self.fc1(h)               ->  n8  call_module fc1 Linear(in=32,out=10,bias=True) [1,10]       <- n7 arg0
+return h                      ->  n9  output output [1,10]                                       <- n8 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [1,3,32,32]
+1 call_module conv1 Conv2d(in=3,out=8,k=5,s=1,p=2) [1,8,32,32]
+2 call_module bn1 BatchNorm2d(features=8) [1,8,32,32]
+3 call_module act1 Sigmoid [] [1,8,32,32]
+4 call_module conv2 Conv2d(in=8,out=32,k=3,s=1,p=1) [1,32,32,32]
+5 call_module act2 Sigmoid [] [1,32,32,32]
+6 call_module pool1 AdaptiveAvgPool2d(out=1) [1,32,1,1]
+7 call_module flat1 Flatten(start=1,end=-1) [1,32]
+8 call_module fc1 Linear(in=32,out=10,bias=True) [1,10]
+9 output output [1,10]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+8 -> 9 : arg0

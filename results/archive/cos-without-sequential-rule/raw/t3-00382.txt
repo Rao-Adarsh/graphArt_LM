@@ -1,0 +1,45 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [2,16]
+x = self.layer1(x)             ->  n1  call_module layer1 Linear(in=16,out=16,bias=True) [2,16]   <- n0 arg0
+x = func.silu(x)               ->  n2  call_function silu [2,16]                                 <- n1 arg0
+if self.use_extra:             ->  the attribute is False, so self.layer2 never runs and gets no node
+x = self.layer3(x)             ->  n3  call_module layer3 Linear(in=16,out=16,bias=True) [2,16]   <- n2 arg0
+x = func.silu(x)               ->  n4  call_function silu [2,16]                                 <- n3 arg0
+x = x + x                      ->  n5  call_function add [2,16]                                  <- n4 arg0, n4 arg1
+p = self.layer4(x)             ->  n6  call_module layer4 Linear(in=16,out=16,bias=True) [2,16]   <- n5 arg0
+v = self.layer5(x)             ->  n7  call_module layer5 Linear(in=16,out=16,bias=True) [2,16]   <- n5 arg0
+b = self.layer6(x)             ->  n8  call_module layer6 Linear(in=16,out=16,bias=True) [2,16]   <- n5 arg0
+x = p + v                      ->  n9  call_function add [2,16]                                  <- n6 arg0, n7 arg1
+x = x + b                      ->  n10 call_function add [2,16]                                  <- n9 arg0, n8 arg1
+x = self.layer7(x)             ->  n11 call_module layer7 Linear(in=16,out=2,bias=True) [2,2]     <- n10 arg0
+return x                       ->  n12 output output [2,2]                                       <- n11 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [2,16]
+1 call_module layer1 Linear(in=16,out=16,bias=True) [2,16]
+2 call_function silu [2,16]
+3 call_module layer3 Linear(in=16,out=16,bias=True) [2,16]
+4 call_function silu [2,16]
+5 call_function add [2,16]
+6 call_module layer4 Linear(in=16,out=16,bias=True) [2,16]
+7 call_module layer5 Linear(in=16,out=16,bias=True) [2,16]
+8 call_module layer6 Linear(in=16,out=16,bias=True) [2,16]
+9 call_function add [2,16]
+10 call_function add [2,16]
+11 call_module layer7 Linear(in=16,out=2,bias=True) [2,2]
+12 output output [2,2]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0, arg1
+5 -> 6 : arg0
+5 -> 7 : arg0
+5 -> 8 : arg0
+6 -> 9 : arg0
+7 -> 9 : arg1
+9 -> 10 : arg0, arg1
+10 -> 11 : arg0
+11 -> 12 : arg0

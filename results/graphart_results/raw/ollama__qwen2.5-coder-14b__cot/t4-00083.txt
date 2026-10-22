@@ -1,0 +1,37 @@
+REASONING:
+1. **Input Placeholder**: The input tensor `x` is a placeholder with shape `[1, 8, 16]`.
+2. **LayerNorm (n1)**: The first operation is `self.n1(x)`, which applies a LayerNorm layer with `features=16`.
+3. **MultiheadAttention (a1)**: The next operation is `self.a1(h1, h1, h1)`, which applies a MultiheadAttention layer with `embed_dim=16` and `num_heads=1`. This operation returns two values: `v` (values) and `c` (attention context).
+4. **Addition**: The operation `h2 = v + x` adds the output of the attention layer `v` to the original input `x`.
+5. **LayerNorm (n2)**: The next operation is `self.n2(h2)`, which applies another LayerNorm layer with `features=16`.
+6. **Linear (f1)**: The operation `self.f1(h3)` applies a Linear layer with `in_features=16` and `out_features=32`.
+7. **GELU Activation**: The operation `h5 = F.gelu(h4)` applies the GELU activation function.
+8. **Linear (f2)**: The operation `self.f2(h5)` applies another Linear layer with `in_features=32` and `out_features=16`.
+9. **Addition**: The operation `h7 = h6 + h2` adds the output of the second linear layer `h6` to the output of the second LayerNorm layer `h2`.
+10. **Output**: The final output is `h7`.
+
+GRAPH:
+```
+INPUTS 1
+NODES
+0 placeholder x [1,8,16]
+1 call_module n1 LayerNorm(shape=[16]) [1,8,16]
+2 call_module a1 MultiheadAttention(embed_dim=16,num_heads=1,batch_first=True) [1,8,16] [1,8,16]
+3 call_function add [1,8,16]
+4 call_module n2 LayerNorm(shape=[16]) [1,8,16]
+5 call_module f1 Linear(in=16,out=32,bias=True) [1,8,32]
+6 call_function gelu [1,8,32]
+7 call_module f2 Linear(in=32,out=16,bias=True) [1,8,16]
+8 call_function add [1,8,16]
+9 output output [1,8,16]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0 arg1 arg2
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0 arg1
+8 -> 9 : arg0
+```

@@ -1,0 +1,15 @@
+INPUTS 1
+NODES
+0 placeholder x [1,24]
+1 call_module f1 Linear(in=24,out=24,bias=False) [1,24]
+2 call_module a1 Tanh [] [1,24]
+3 call_module f2 Linear(in=24,out=24,bias=False) [1,24]
+4 call_module f3 Linear(in=24,out=24,bias=False) [1,24]
+5 call_module f4 Linear(in=24,out=24,bias=False) [1,24]
+6 call_function add [] [1,24]
+7 call_function add [] [1,24]
+8 call_module f5 Linear(in=24,out=24,bias=False) [1,24]
+9 call_module a1 Tanh [] [1,24]
+10 call_function add [] [1,24]
+11 call_module f6 Linear(in=24,out=10,bias=False) [1,10]
+12 output output [1,10]

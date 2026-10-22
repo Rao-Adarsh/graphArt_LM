@@ -1,0 +1,10 @@
+{
+  "backend": "openrouter",
+  "model": "google/gemma-4-31b-it:free",
+  "prompt": "zero_shot",
+  "split": "test",
+  "effort": "high",
+  "n": 40,
+  "cached": 39,
+  "failed": 0
+}

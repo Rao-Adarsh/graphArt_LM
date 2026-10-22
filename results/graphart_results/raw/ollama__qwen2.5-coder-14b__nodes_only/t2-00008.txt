@@ -1,0 +1,13 @@
+INPUTS 1
+NODES
+0 placeholder x [2,24]
+1 call_module fc1 Linear(in=24,out=24,bias=True) [2,24]
+2 call_module act1 Sigmoid [] [2,24]
+3 call_module stack1.0 Linear(in=24,out=24,bias=True) [2,24]
+4 call_module stack1.1 Sigmoid [] [2,24]
+5 call_module stack1.2 Linear(in=24,out=24,bias=True) [2,24]
+6 call_module stack1.3 Sigmoid [] [2,24]
+7 call_module stack1.4 Linear(in=24,out=24,bias=True) [2,24]
+8 call_module stack1.5 Sigmoid [] [2,24]
+9 call_module fc2 Linear(in=24,out=4,bias=True) [2,4]
+10 output output [2,4]

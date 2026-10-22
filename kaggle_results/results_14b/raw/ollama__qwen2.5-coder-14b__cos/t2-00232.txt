@@ -1,0 +1,35 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [1,16]
+h1 = self.post(x)             ->  n1  call_module post Linear(in=16,out=16,bias=True) [1,16]    <- n0 arg0
+h2 = fn.silu(h1)              ->  n2  call_function silu [1,16]                                  <- n1 arg0
+for layer in self.shrink      ->  the ModuleList holds 4 layers, so the body runs four times
+  h2 = layer(h2)  [shrink.0]  ->  n3  call_module shrink.0 Linear(in=16,out=16,bias=True) [1,16]  <- n2 arg0
+  h2 = layer(h2)  [shrink.1]  ->  n4  call_module shrink.1 Linear(in=16,out=16,bias=True) [1,16]  <- n3 arg0
+  h2 = layer(h2)  [shrink.2]  ->  n5  call_module shrink.2 Linear(in=16,out=16,bias=True) [1,16]  <- n4 arg0
+  h2 = layer(h2)  [shrink.3]  ->  n6  call_module shrink.3 Linear(in=16,out=16,bias=True) [1,16]  <- n5 arg0
+h3 = fn.silu(h2)              ->  n7  call_function silu [1,16]                                  <- n6 arg0
+h4 = self.merge(h3)           ->  n8  call_module merge Linear(in=16,out=10,bias=True) [1,10]     <- n7 arg0
+return h4                     ->  n9  output output [1,10]                                       <- n8 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [1,16]
+1 call_module post Linear(in=16,out=16,bias=True) [1,16]
+2 call_function silu [1,16]
+3 call_module shrink.0 Linear(in=16,out=16,bias=True) [1,16]
+4 call_module shrink.1 Linear(in=16,out=16,bias=True) [1,16]
+5 call_module shrink.2 Linear(in=16,out=16,bias=True) [1,16]
+6 call_module shrink.3 Linear(in=16,out=16,bias=True) [1,16]
+7 call_function silu [1,16]
+8 call_module merge Linear(in=16,out=10,bias=True) [1,10]
+9 output output [1,10]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+8 -> 9 : arg0

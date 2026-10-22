@@ -5,6 +5,10 @@
 - valid_topology : the same, ignoring shape consistency. This is what gates
                `exact`, so one bad dimension cannot sink a correct topology.
 - exact      : labelled-graph isomorphism. The headline number.
+- exact_topo : the same, comparing nodes without their module parameters and
+               without the function-vs-method distinction. A model that places
+               the right operation but spells it in another notation has still
+               recovered the topology.
 - node_f1    : overlap of the multisets of node labels
 - edge_f1    : overlap of the multisets of (source label, target label, edge label)
 - shape_acc  : of the nodes whose label was right, how many also had the right
@@ -24,7 +28,7 @@ from collections import Counter
 
 import networkx as nx
 
-from .domain import check, edge_label, node_label, to_networkx
+from .domain import check, edge_label, node_label, to_networkx, topology_label
 
 
 def _f1(pred: Counter, true: Counter) -> dict:
@@ -36,10 +40,27 @@ def _f1(pred: Counter, true: Counter) -> dict:
     return {"precision": p, "recall": r, "f1": 2 * p * r / (p + r) if p + r else 0.0}
 
 
-def _edge_labels(graph: dict) -> Counter:
-    labels = {n["id"]: node_label(n) for n in graph["nodes"]}
+def _edge_labels(graph: dict, label=node_label) -> Counter:
+    labels = {n["id"]: label(n) for n in graph["nodes"]}
     return Counter((labels.get(e["src"]), labels.get(e["dst"]), edge_label(e))
                    for e in graph["edges"])
+
+
+def _isomorphic(pred: dict, truth: dict, label) -> bool:
+    """Labelled isomorphism under `label`, with cheap multiset checks first."""
+    if Counter(map(label, pred["nodes"])) != Counter(map(label, truth["nodes"])):
+        return False
+    if _edge_labels(pred, label) != _edge_labels(truth, label):
+        return False
+    # to_networkx keeps every node field as an attribute, so `label` reads them.
+    return nx.is_isomorphic(to_networkx(pred), to_networkx(truth),
+                            node_match=lambda a, b: label(a) == label(b),
+                            edge_match=lambda a, b: a["label"] == b["label"])
+
+
+def exact_topology(pred: dict, truth: dict) -> bool:
+    """Structurally sound and isomorphic to the truth, ignoring module parameters."""
+    return not check(pred, shapes=False) and _isomorphic(pred, truth, topology_label)
 
 
 def _shape_key(node: dict):
@@ -81,8 +102,11 @@ def compare_nodes(pred: dict, truth: dict) -> dict:
     """
     f1 = _f1(Counter(node_label(n) for n in pred["nodes"]),
              Counter(node_label(n) for n in truth["nodes"]))
+    topo = (Counter(topology_label(n) for n in pred["nodes"])
+            == Counter(topology_label(n) for n in truth["nodes"]))
     return {"valid": None, "valid_topology": None, "errors": [],
-            "exact": f1["f1"] == 1.0, "node_f1": f1["f1"], "edge_f1": None,
+            "exact": f1["f1"] == 1.0, "exact_topo": topo,
+            "node_f1": f1["f1"], "edge_f1": None,
             "shape_acc": _shape_accuracy(pred, truth)}
 
 
@@ -96,7 +120,8 @@ def compare(pred: dict, truth: dict) -> dict:
         to_networkx(pred), to_networkx(truth),
         node_match=lambda a, b: a["label"] == b["label"],
         edge_match=lambda a, b: a["label"] == b["label"]))
+    exact_topo = not structural and _isomorphic(pred, truth, topology_label)
     return {"valid": not errors, "valid_topology": not structural,
-            "errors": errors, "exact": exact,
+            "errors": errors, "exact": exact, "exact_topo": exact_topo,
             "node_f1": nodes["f1"], "edge_f1": edges["f1"],
             "shape_acc": _shape_accuracy(pred, truth)}

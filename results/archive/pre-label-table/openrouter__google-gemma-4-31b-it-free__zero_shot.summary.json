@@ -1,0 +1,35 @@
+{
+  "results": "openrouter__google-gemma-4-31b-it-free__zero_shot.jsonl",
+  "mode": "full",
+  "overall": {
+    "parsed": 0.0,
+    "valid": 0.0,
+    "exact": 0.0,
+    "exact_topo": 1.0,
+    "node_f1": 0.0,
+    "edge_f1": 0.0,
+    "n": 1
+  },
+  "by_tier": {
+    "tier 1": {
+      "parsed": 0.0,
+      "valid": 0.0,
+      "exact": 0.0,
+      "exact_topo": 1.0,
+      "node_f1": 0.0,
+      "edge_f1": 0.0,
+      "n": 1
+    }
+  },
+  "by_size": {
+    "9-15": {
+      "parsed": 0.0,
+      "valid": 0.0,
+      "exact": 0.0,
+      "exact_topo": 1.0,
+      "node_f1": 0.0,
+      "edge_f1": 0.0,
+      "n": 1
+    }
+  }
+}

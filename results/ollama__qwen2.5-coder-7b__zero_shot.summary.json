@@ -1,0 +1,80 @@
+{
+  "results": "ollama__qwen2.5-coder-7b__zero_shot.jsonl",
+  "mode": "full",
+  "overall": {
+    "parsed": 0.8,
+    "valid": 0.55,
+    "exact": 0.2,
+    "exact_topo": 0.25,
+    "node_f1": 0.639,
+    "edge_f1": 0.415,
+    "n": 40
+  },
+  "by_tier": {
+    "tier 1": {
+      "parsed": 1.0,
+      "valid": 0.9,
+      "exact": 0.3,
+      "exact_topo": 0.5,
+      "node_f1": 0.821,
+      "edge_f1": 0.602,
+      "n": 10
+    },
+    "tier 2": {
+      "parsed": 1.0,
+      "valid": 0.9,
+      "exact": 0.5,
+      "exact_topo": 0.5,
+      "node_f1": 0.871,
+      "edge_f1": 0.703,
+      "n": 10
+    },
+    "tier 3": {
+      "parsed": 0.6,
+      "valid": 0.2,
+      "exact": 0.0,
+      "exact_topo": 0.0,
+      "node_f1": 0.432,
+      "edge_f1": 0.144,
+      "n": 10
+    },
+    "tier 4": {
+      "parsed": 0.6,
+      "valid": 0.2,
+      "exact": 0.0,
+      "exact_topo": 0.0,
+      "node_f1": 0.431,
+      "edge_f1": 0.211,
+      "n": 10
+    }
+  },
+  "by_size": {
+    "3-8 nodes": {
+      "parsed": 1.0,
+      "valid": 0.0,
+      "exact": 0.0,
+      "exact_topo": 0.0,
+      "node_f1": 0.875,
+      "edge_f1": 0.714,
+      "n": 1
+    },
+    "9-15": {
+      "parsed": 0.784,
+      "valid": 0.595,
+      "exact": 0.216,
+      "exact_topo": 0.27,
+      "node_f1": 0.62,
+      "edge_f1": 0.401,
+      "n": 37
+    },
+    "16-25": {
+      "parsed": 1.0,
+      "valid": 0.0,
+      "exact": 0.0,
+      "exact_topo": 0.0,
+      "node_f1": 0.859,
+      "edge_f1": 0.515,
+      "n": 2
+    }
+  }
+}

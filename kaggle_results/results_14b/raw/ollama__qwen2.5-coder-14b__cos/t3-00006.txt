@@ -1,0 +1,55 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [1,16]
+h = self.fc1(x)               ->  n1  call_module fc1 Linear(in=16,out=16,bias=True) [1,16]   <- n0 arg0
+h = func.tanh(h)              ->  n2  call_function tanh [1,16]                                <- n1 arg0
+right = self.fc2(h)           ->  n3  call_module fc2 Linear(in=16,out=16,bias=True) [1,16]   <- n2 arg0
+q = self.fc3(h)               ->  n4  call_module fc3 Linear(in=16,out=16,bias=True) [1,16]   <- n2 arg0
+u = self.fc4(h)               ->  n5  call_module fc4 Linear(in=16,out=16,bias=True) [1,16]   <- n2 arg0
+h = right + q                 ->  n6  call_function add [1,16]                                 <- n3 arg0, n4 arg1
+h = h + u                     ->  n7  call_function add [1,16]                                 <- n6 arg0, n5 arg1
+u = self.fc5(h)               ->  n8  call_module fc5 Linear(in=16,out=8,bias=True) [1,8]     <- n7 arg0
+c = self.fc6(h)               ->  n9  call_module fc6 Linear(in=16,out=8,bias=True) [1,8]     <- n7 arg0
+h = torch.cat([u, c], dim=1)  ->  n10 call_function cat [1,16]                                 <- n8 arg0, n9 arg1
+h = self.fc7(h)               ->  n11 call_module fc7 Linear(in=16,out=16,bias=True) [1,16]   <- n10 arg0
+h = func.tanh(h)              ->  n12 call_function tanh [1,16]                                <- n11 arg0
+h = self.fc7(h)               ->  n13 call_module fc7 Linear(in=16,out=16,bias=True) [1,16]   <- n12 arg0
+h = self.fc8(h)               ->  n14 call_module fc8 Linear(in=16,out=10,bias=True) [1,10]   <- n13 arg0
+return h                      ->  n15 output output [1,10]                                     <- n14 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [1,16]
+1 call_module fc1 Linear(in=16,out=16,bias=True) [1,16]
+2 call_function tanh [1,16]
+3 call_module fc2 Linear(in=16,out=16,bias=True) [1,16]
+4 call_module fc3 Linear(in=16,out=16,bias=True) [1,16]
+5 call_module fc4 Linear(in=16,out=16,bias=True) [1,16]
+6 call_function add [1,16]
+7 call_function add [1,16]
+8 call_module fc5 Linear(in=16,out=8,bias=True) [1,8]
+9 call_module fc6 Linear(in=16,out=8,bias=True) [1,8]
+10 call_function cat [1,16]
+11 call_module fc7 Linear(in=16,out=16,bias=True) [1,16]
+12 call_function tanh [1,16]
+13 call_module fc7 Linear(in=16,out=16,bias=True) [1,16]
+14 call_module fc8 Linear(in=16,out=10,bias=True) [1,10]
+15 output output [1,10]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+2 -> 4 : arg0
+2 -> 5 : arg0
+3 -> 6 : arg0
+4 -> 6 : arg1
+5 -> 7 : arg0
+6 -> 7 : arg1
+7 -> 8 : arg0
+7 -> 9 : arg1
+8 -> 10 : arg0
+9 -> 10 : arg1
+10 -> 11 : arg0
+11 -> 12 : arg0
+12 -> 13 : arg0
+13 -> 14 : arg0
+14 -> 15 : arg0

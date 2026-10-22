@@ -1,0 +1,13 @@
+INPUTS 1
+NODES
+0 placeholder x [4,64]
+1 call_module layer1 Linear(in=64,out=48,bias=False) [4,48]
+2 call_function relu [4,48]
+3 call_module layer2 Linear(in=48,out=12,bias=False) [4,12]
+4 call_function relu [4,12]
+5 call_module layer3 Linear(in=12,out=48,bias=False) [4,48]
+6 call_function relu [4,48]
+7 call_module layer4 Linear(in=48,out=64,bias=False) [4,64]
+8 call_function relu [4,64]
+9 call_module layer5 Linear(in=64,out=10,bias=False) [4,10]
+10 output output [4,10]

@@ -1,0 +1,80 @@
+{
+  "results": "openrouter__google-gemma-4-31b-it-free__zero_shot.jsonl",
+  "mode": "full",
+  "overall": {
+    "parsed": 0.925,
+    "valid": 0.925,
+    "exact": 0.75,
+    "exact_topo": 0.925,
+    "node_f1": 0.892,
+    "edge_f1": 0.849,
+    "n": 40
+  },
+  "by_tier": {
+    "tier 1": {
+      "parsed": 1.0,
+      "valid": 1.0,
+      "exact": 0.7,
+      "exact_topo": 1.0,
+      "node_f1": 0.921,
+      "edge_f1": 0.825,
+      "n": 10
+    },
+    "tier 2": {
+      "parsed": 1.0,
+      "valid": 1.0,
+      "exact": 0.9,
+      "exact_topo": 1.0,
+      "node_f1": 0.992,
+      "edge_f1": 0.983,
+      "n": 10
+    },
+    "tier 3": {
+      "parsed": 1.0,
+      "valid": 1.0,
+      "exact": 0.7,
+      "exact_topo": 1.0,
+      "node_f1": 0.954,
+      "edge_f1": 0.887,
+      "n": 10
+    },
+    "tier 4": {
+      "parsed": 0.7,
+      "valid": 0.7,
+      "exact": 0.7,
+      "exact_topo": 0.7,
+      "node_f1": 0.7,
+      "edge_f1": 0.7,
+      "n": 10
+    }
+  },
+  "by_size": {
+    "3-8 nodes": {
+      "parsed": 1.0,
+      "valid": 1.0,
+      "exact": 1.0,
+      "exact_topo": 1.0,
+      "node_f1": 1.0,
+      "edge_f1": 1.0,
+      "n": 1
+    },
+    "9-15": {
+      "parsed": 0.919,
+      "valid": 0.919,
+      "exact": 0.757,
+      "exact_topo": 0.919,
+      "node_f1": 0.887,
+      "edge_f1": 0.846,
+      "n": 37
+    },
+    "16-25": {
+      "parsed": 1.0,
+      "valid": 1.0,
+      "exact": 0.5,
+      "exact_topo": 1.0,
+      "node_f1": 0.938,
+      "edge_f1": 0.833,
+      "n": 2
+    }
+  }
+}

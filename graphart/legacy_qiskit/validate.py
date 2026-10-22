@@ -25,6 +25,12 @@ def node_label(node: dict) -> tuple:
     return (node["gate"], tuple(node["qubits"]), tuple(node["clbits"]), tuple(node["params"]))
 
 
+def topology_label(node: dict) -> tuple:
+    """`node_label` without the rotation angles, matching the PyTorch domain's
+    params-blind label so the two stay interchangeable through `domain.py`."""
+    return (node["gate"], tuple(node["qubits"]), tuple(node["clbits"]))
+
+
 def edge_label(edge: dict) -> tuple:
     """What `metrics` compares an edge on. Named to match the PyTorch domain so
     the two stay interchangeable through `domain.py`."""

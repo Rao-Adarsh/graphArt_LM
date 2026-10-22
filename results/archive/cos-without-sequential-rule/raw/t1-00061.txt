@@ -1,0 +1,37 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [1,16]
+x = self.fc_1(x)             ->  n1  call_module fc_1 Linear(in=16,out=12,bias=True) [1,12]   <- n0 arg0
+x = self.act_1(x)            ->  n2  call_module act_1 ReLU [1,12]                             <- n1 arg0
+x = self.fc_2(x)             ->  n3  call_module fc_2 Linear(in=12,out=12,bias=True) [1,12]  <- n2 arg0
+x = self.act_2(x)            ->  n4  call_module act_2 ReLU [1,12]                             <- n3 arg0
+x = self.fc_3(x)             ->  n5  call_module fc_3 Linear(in=12,out=12,bias=True) [1,12]  <- n4 arg0
+x = self.act_3(x)            ->  n6  call_module act_3 ReLU [1,12]                             <- n5 arg0
+x = self.fc_4(x)             ->  n7  call_module fc_4 Linear(in=12,out=12,bias=True) [1,12]  <- n6 arg0
+x = self.act_4(x)            ->  n8  call_module act_4 ReLU [1,12]                             <- n7 arg0
+x = self.fc_5(x)             ->  n9  call_module fc_5 Linear(in=12,out=4,bias=True) [1,4]    <- n8 arg0
+return x                     ->  n10 output output [1,4]                                     <- n9 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [1,16]
+1 call_module fc_1 Linear(in=16,out=12,bias=True) [1,12]
+2 call_module act_1 ReLU [1,12]
+3 call_module fc_2 Linear(in=12,out=12,bias=True) [1,12]
+4 call_module act_2 ReLU [1,12]
+5 call_module fc_3 Linear(in=12,out=12,bias=True) [1,12]
+6 call_module act_3 ReLU [1,12]
+7 call_module fc_4 Linear(in=12,out=12,bias=True) [1,12]
+8 call_module act_4 ReLU [1,12]
+9 call_module fc_5 Linear(in=12,out=4,bias=True) [1,4]
+10 output output [1,4]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+8 -> 9 : arg0
+9 -> 10 : arg0

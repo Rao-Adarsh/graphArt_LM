@@ -63,6 +63,24 @@ def node_label(node: dict) -> tuple:
             tuple(sorted((k, _hashable(v)) for k, v in node["params"].items())))
 
 
+def topology_label(node: dict) -> tuple:
+    """What `exact_topo` compares: `node_label` without the module's parameters.
+
+    A layer's hyperparameters are written in our own notation (features=8, not
+    8), and a model that has the right layer in the right place but the wrong
+    spelling of its arguments has still recovered the topology. This label
+    keeps the class, so a Linear where a Conv2d belongs is still wrong.
+
+    It also does not distinguish call_function from call_method: `torch.tanh(x)`
+    and `x.tanh()` are the same operation spelled two ways. The two ops can only
+    share a target when the extractor aliased them to one name -- an un-aliased
+    function keeps its module prefix (torch.reshape) and a method does not
+    (reshape) -- so this merges exactly the aliased spellings and nothing else.
+    """
+    op = "call" if node["op"] in ("call_function", "call_method") else node["op"]
+    return (op, node["target"], node["cls"])
+
+
 def edge_label(edge: dict) -> tuple:
     return tuple(sorted(edge["args"]))
 

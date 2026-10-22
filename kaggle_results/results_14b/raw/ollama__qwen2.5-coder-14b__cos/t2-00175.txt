@@ -1,0 +1,41 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [2,16]
+x = self.fc1(x)               ->  n1  call_module fc1 Linear(in=16,out=16,bias=True) [2,16]   <- n0 arg0
+x = torch.sigmoid(x)          ->  n2  call_function sigmoid [2,16]                            <- n1 arg0
+x = self.stack1(x)            ->  n3  call_module stack1 Sequential [2,16]                    <- n2 arg0
+  the Sequential holds 6 layers, so the body runs 6 times
+  x = self.stack1[0](x)       ->  n4  call_module stack1.0 Linear(in=16,out=16,bias=True) [2,16]  <- n3 arg0
+  x = self.stack1[1](x)       ->  n5  call_module stack1.1 Sigmoid [2,16]                        <- n4 arg0
+  x = self.stack1[2](x)       ->  n6  call_module stack1.2 Linear(in=16,out=16,bias=True) [2,16]  <- n5 arg0
+  x = self.stack1[3](x)       ->  n7  call_module stack1.3 Sigmoid [2,16]                        <- n6 arg0
+  x = self.stack1[4](x)       ->  n8  call_module stack1.4 Linear(in=16,out=16,bias=True) [2,16]  <- n7 arg0
+  x = self.stack1[5](x)       ->  n9  call_module stack1.5 Sigmoid [2,16]                        <- n8 arg0
+x = self.fc2(x)               ->  n10 call_module fc2 Linear(in=16,out=10,bias=True) [2,10]    <- n9 arg0
+return x                      ->  n11 output output [2,10]                                      <- n10 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [2,16]
+1 call_module fc1 Linear(in=16,out=16,bias=True) [2,16]
+2 call_function sigmoid [2,16]
+3 call_module stack1 Sequential [2,16]
+4 call_module stack1.0 Linear(in=16,out=16,bias=True) [2,16]
+5 call_module stack1.1 Sigmoid [2,16]
+6 call_module stack1.2 Linear(in=16,out=16,bias=True) [2,16]
+7 call_module stack1.3 Sigmoid [2,16]
+8 call_module stack1.4 Linear(in=16,out=16,bias=True) [2,16]
+9 call_module stack1.5 Sigmoid [2,16]
+10 call_module fc2 Linear(in=16,out=10,bias=True) [2,10]
+11 output output [2,10]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+8 -> 9 : arg0
+9 -> 10 : arg0
+10 -> 11 : arg0

@@ -1,0 +1,15 @@
+INPUTS 1
+NODES
+0 placeholder x [2,16]
+1 call_module fc_1 Linear(in=16,out=16,bias=True) [2,16]
+2 call_module act_1 SiLU [] [2,16]
+3 call_module block_1.0.0 Linear(in=16,out=16,bias=True) [2,16]
+4 call_module block_1.0.1 SiLU [] [2,16]
+5 call_module block_1.1.0 Linear(in=16,out=16,bias=True) [2,16]
+6 call_module block_1.1.1 SiLU [] [2,16]
+7 call_module block_1.2.0 Linear(in=16,out=16,bias=True) [2,16]
+8 call_module block_1.2.1 SiLU [] [2,16]
+9 call_module block_1.3.0 Linear(in=16,out=16,bias=True) [2,16]
+10 call_module block_1.3.1 SiLU [] [2,16]
+11 call_module fc_2 Linear(in=16,out=2,bias=True) [2,2]
+12 output output [2,2]

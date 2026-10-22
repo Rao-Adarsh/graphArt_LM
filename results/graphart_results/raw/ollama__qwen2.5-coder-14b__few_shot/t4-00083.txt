@@ -1,0 +1,20 @@
+INPUTS 1
+NODES
+0 placeholder x [1,8,16]
+1 call_module n1 LayerNorm(shape=[16]) [1,8,16]
+2 call_module a1 MultiheadAttention(16,1,batch_first=True) [1,8,16]
+3 call_module n2 LayerNorm(shape=[16]) [1,8,16]
+4 call_module f1 Linear(in=16,out=32,bias=True) [1,8,32]
+5 call_function gelu [1,8,32]
+6 call_module f2 Linear(in=32,out=16,bias=True) [1,8,16]
+7 call_function add [1,8,16]
+8 output output [1,8,16]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+0 -> 7 : arg1

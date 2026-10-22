@@ -1,0 +1,40 @@
+REASONING:
+1. **Input Placeholder**: The input tensor `x` is a placeholder with shape `[1, 3, 32, 32]`.
+2. **Convolutional Layers**: The model has three convolutional layers (`c1`, `c2`, `c3`) with specified parameters.
+3. **Batch Normalization Layers**: The model has two batch normalization layers (`b1`, `b2`) with specified features.
+4. **Activation Layers**: The model has three GELU activation layers (`a1`, `a2`, `a3`).
+5. **Pooling Layer**: The model has an adaptive average pooling layer (`p1`) that reduces the spatial dimensions to 1x1.
+6. **Flatten Layer**: The model has a flatten layer (`f1`) that converts the tensor to a 1D vector.
+7. **Fully Connected Layer**: The model has a fully connected layer (`f1_2`) with specified input and output dimensions.
+
+GRAPH:
+```
+INPUTS 1
+NODES
+0 placeholder x [1,3,32,32]
+1 call_module c1 Conv2d(in=3,out=48,k=3,s=1,p=1) [1,48,32,32]
+2 call_module b1 BatchNorm2d(features=48) [1,48,32,32]
+3 call_module a1 GELU [1,48,32,32]
+4 call_module c2 Conv2d(in=48,out=8,k=5,s=1,p=2) [1,8,32,32]
+5 call_module a2 GELU [1,8,32,32]
+6 call_module c3 Conv2d(in=8,out=12,k=5,s=1,p=2) [1,12,32,32]
+7 call_module b2 BatchNorm2d(features=12) [1,12,32,32]
+8 call_module a3 GELU [1,12,32,32]
+9 call_module p1 AdaptiveAvgPool2d(out=1) [1,12,1,1]
+10 call_module f1 Flatten [1,12]
+11 call_module f1_2 Linear(in=12,out=10,bias=True) [1,10]
+12 output output [1,10]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+8 -> 9 : arg0
+9 -> 10 : arg0
+10 -> 11 : arg0
+11 -> 12 : arg0
+```

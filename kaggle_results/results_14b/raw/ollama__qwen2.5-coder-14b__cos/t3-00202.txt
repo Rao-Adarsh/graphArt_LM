@@ -1,0 +1,47 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [1,16]
+h = self.f1(x)                ->  n1  call_module f1 Linear(in=16,out=16,bias=True) [1,16]   <- n0 arg0
+h = self.a1(h)                ->  n2  call_module a1 SiLU [] [1,16]                          <- n1 arg0
+h = self.f2(h)                ->  n3  call_module f2 Linear(in=16,out=16,bias=True) [1,16]   <- n2 arg0
+h = self.a2(h)                ->  n4  call_module a2 SiLU [] [1,16]                          <- n3 arg0
+h = self.f2(h)                ->  n5  call_module f2 Linear(in=16,out=16,bias=True) [1,16]   <- n4 arg0
+v = self.f3(h)                ->  n6  call_module f3 Linear(in=16,out=8,bias=True) [1,8]     <- n5 arg0
+q = self.f4(h)                ->  n7  call_module f4 Linear(in=16,out=8,bias=True) [1,8]     <- n5 arg0
+h = torch.cat([v, q], dim=1)  ->  n8  call_function cat [1,16]                              <- n6 arg0, n7 arg1
+h = self.f5(h)                ->  n9  call_module f5 Linear(in=16,out=16,bias=True) [1,16]   <- n8 arg0
+h = self.a3(h)                ->  n10 call_module a3 SiLU [] [1,16]                          <- n9 arg0
+h = h + h                     ->  n11 call_function add [1,16]                              <- n10 arg0, n10 arg1
+h = self.f6(h)                ->  n12 call_module f6 Linear(in=16,out=4,bias=True) [1,4]     <- n11 arg0
+return h                      ->  n13 output output [1,4]                                    <- n12 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [1,16]
+1 call_module f1 Linear(in=16,out=16,bias=True) [1,16]
+2 call_module a1 SiLU [] [1,16]
+3 call_module f2 Linear(in=16,out=16,bias=True) [1,16]
+4 call_module a2 SiLU [] [1,16]
+5 call_module f2 Linear(in=16,out=16,bias=True) [1,16]
+6 call_module f3 Linear(in=16,out=8,bias=True) [1,8]
+7 call_module f4 Linear(in=16,out=8,bias=True) [1,8]
+8 call_function cat [1,16]
+9 call_module f5 Linear(in=16,out=16,bias=True) [1,16]
+10 call_module a3 SiLU [] [1,16]
+11 call_function add [1,16]
+12 call_module f6 Linear(in=16,out=4,bias=True) [1,4]
+13 output output [1,4]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+5 -> 7 : arg0
+6 -> 8 : arg0
+7 -> 8 : arg1
+8 -> 9 : arg0
+9 -> 10 : arg0
+10 -> 11 : arg0
+11 -> 12 : arg0
+12 -> 13 : arg0

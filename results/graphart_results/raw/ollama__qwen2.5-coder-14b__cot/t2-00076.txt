@@ -1,0 +1,37 @@
+REASONING:
+1. **Inputs**: The input to the forward pass is a tensor `x` with shape `[2, 32]`.
+2. **Nodes**:
+   - **Placeholder**: The input tensor `x` is a placeholder.
+   - **call_module**: Each layer in the network is represented as a `call_module` node.
+     - `fc1`: A `Linear` layer with `in_features=32` and `out_features=32`.
+     - `act1`: A `Tanh` activation function.
+     - `stack1`: A `Sequential` container with two `Linear` layers and two `Tanh` activation functions.
+     - `fc2`: A `Linear` layer with `in_features=32` and `out_features=2`.
+   - **output**: The final output of the forward pass.
+3. **Edges**:
+   - Each node's output is connected to the next node's input.
+   - The edges are labeled with the argument position they fill in the next node.
+
+GRAPH:
+```
+INPUTS 1
+NODES
+0 placeholder x [2,32]
+1 call_module fc1 Linear(in=32,out=32,bias=True) [2,32]
+2 call_module act1 Tanh [] [2,32]
+3 call_module stack1.0 Linear(in=32,out=32,bias=True) [2,32]
+4 call_module stack1.1 Tanh [] [2,32]
+5 call_module stack1.2 Linear(in=32,out=32,bias=True) [2,32]
+6 call_module stack1.3 Tanh [] [2,32]
+7 call_module fc2 Linear(in=32,out=2,bias=True) [2,2]
+8 output output [2,2]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+```

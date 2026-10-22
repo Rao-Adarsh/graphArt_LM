@@ -1,0 +1,29 @@
+INPUTS 1
+NODES
+0 placeholder x [1,3,32,32]
+1 call_module head Conv2d(in=3,out=12,k=3,s=1,p=1) [1,12,32,32]
+2 call_module gate BatchNorm2d(features=12) [1,12,32,32]
+3 call_method tanh output [1,12,32,32]
+4 call_module tail Conv2d(in=12,out=48,k=3,s=1,p=1) [1,48,32,32]
+5 call_method tanh output [1,48,32,32]
+6 call_module proj Conv2d(in=48,out=24,k=3,s=1,p=1) [1,24,32,32]
+7 call_module neck BatchNorm2d(features=24) [1,24,32,32]
+8 call_method tanh output [1,24,32,32]
+9 call_module merge AdaptiveAvgPool2d(out=1) [1,24,1,1]
+10 call_module encode Flatten(start=1,end=-1) [1,24]
+11 call_module stem Linear(in=24,out=2,bias=True) [1,2]
+12 output output [1,2]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+8 -> 9 : arg0
+9 -> 10 : arg0
+10 -> 11 : arg0
+11 -> 12 : arg0
+12 -> 13 : arg0

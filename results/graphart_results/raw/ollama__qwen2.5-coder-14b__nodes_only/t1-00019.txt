@@ -1,0 +1,13 @@
+INPUTS 1
+NODES
+0 placeholder x [1,16]
+1 call_module tail Linear(in=16,out=16,bias=False) [1,16]
+2 call_module merge Tanh [] [1,16]
+3 call_module proj Linear(in=16,out=16,bias=False) [1,16]
+4 call_module encode Tanh [] [1,16]
+5 call_module neck Linear(in=16,out=64,bias=False) [1,64]
+6 call_module mix Tanh [] [1,64]
+7 call_module stem Linear(in=64,out=64,bias=False) [1,64]
+8 call_module body Tanh [] [1,64]
+9 call_module head Linear(in=64,out=10,bias=False) [1,10]
+10 output output [1,10]

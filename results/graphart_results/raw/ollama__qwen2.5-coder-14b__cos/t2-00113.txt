@@ -1,0 +1,22 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [2,32]
+h1 = self.fc1(x)             ->  n1  call_module fc1 Linear(in=32,out=32,bias=False) [2,32]    <- n0 arg0
+h2 = F.sigmoid(h1)           ->  n2  call_function sigmoid [2,32]                               <- n1 arg0
+h3 = self.stack1(h2)          ->  n3  call_module stack1 Sequential [2,32]                       <- n2 arg0
+h4 = self.fc2(h3)             ->  n4  call_module fc2 Linear(in=32,out=2,bias=False) [2,2]     <- n3 arg0
+return h4                     ->  n5  output output [2,2]                                       <- n4 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [2,32]
+1 call_module fc1 Linear(in=32,out=32,bias=False) [2,32]
+2 call_function sigmoid [2,32]
+3 call_module stack1 Sequential [2,32]
+4 call_module fc2 Linear(in=32,out=2,bias=False) [2,2]
+5 output output [2,2]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0

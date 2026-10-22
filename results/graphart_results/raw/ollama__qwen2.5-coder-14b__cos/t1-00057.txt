@@ -1,0 +1,37 @@
+SIMULATION
+x is the input                ->  n0  placeholder x [4,64]
+h = self.layer1(x)            ->  n1  call_module layer1 Linear(in=64,out=48,bias=False) [4,48]   <- n0 arg0
+h = fn.relu(h)                ->  n2  call_function relu [4,48]                                 <- n1 arg0
+h = self.layer2(h)            ->  n3  call_module layer2 Linear(in=48,out=12,bias=False) [4,12]   <- n2 arg0
+h = fn.relu(h)                ->  n4  call_function relu [4,12]                                 <- n3 arg0
+h = self.layer3(h)            ->  n5  call_module layer3 Linear(in=12,out=48,bias=False) [4,48]   <- n4 arg0
+h = fn.relu(h)                ->  n6  call_function relu [4,48]                                 <- n5 arg0
+h = self.layer4(h)            ->  n7  call_module layer4 Linear(in=48,out=64,bias=False) [4,64]   <- n6 arg0
+h = fn.relu(h)                ->  n8  call_function relu [4,64]                                 <- n7 arg0
+h = self.layer5(h)            ->  n9  call_module layer5 Linear(in=64,out=10,bias=False) [4,10]   <- n8 arg0
+return h                      ->  n10 output output [4,10]                                       <- n9 arg0
+GRAPH
+INPUTS 1
+NODES
+0 placeholder x [4,64]
+1 call_module layer1 Linear(in=64,out=48,bias=False) [4,48]
+2 call_function relu [4,48]
+3 call_module layer2 Linear(in=48,out=12,bias=False) [4,12]
+4 call_function relu [4,12]
+5 call_module layer3 Linear(in=12,out=48,bias=False) [4,48]
+6 call_function relu [4,48]
+7 call_module layer4 Linear(in=48,out=64,bias=False) [4,64]
+8 call_function relu [4,64]
+9 call_module layer5 Linear(in=64,out=10,bias=False) [4,10]
+10 output output [4,10]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+8 -> 9 : arg0
+9 -> 10 : arg0

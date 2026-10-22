@@ -1,0 +1,44 @@
+REASONING:
+1. The input to the forward pass is a tensor of shape [1, 16].
+2. The first operation is a linear transformation using `self.f1`, which has parameters `in=16, out=16`.
+3. The output of `self.f1` is then passed through the GELU activation function.
+4. The same linear transformation `self.f2` is applied twice, each followed by the GELU activation function.
+5. The outputs of the two `self.f2` layers are added together.
+6. The result is then passed through another linear transformation `self.f3`, which has parameters `in=16, out=16`.
+7. The output of `self.f3` is added to the output of another linear transformation `self.f4`, which also has parameters `in=16, out=16`.
+8. The result is then added to the output of another linear transformation `self.f5`, which also has parameters `in=16, out=16`.
+9. Finally, the result is passed through another linear transformation `self.f6`, which has parameters `in=16, out=2`.
+
+GRAPH:
+INPUTS 1
+NODES
+0 placeholder x [1,16]
+1 call_module f1 Linear(in=16,out=16,bias=True) [1,16]
+2 call_function gelu [1,16]
+3 call_module f2 Linear(in=16,out=16,bias=True) [1,16]
+4 call_function gelu [1,16]
+5 call_module f2 Linear(in=16,out=16,bias=True) [1,16]
+6 call_function gelu [1,16]
+7 call_function add [1,16]
+8 call_module f3 Linear(in=16,out=16,bias=True) [1,16]
+9 call_module f4 Linear(in=16,out=16,bias=True) [1,16]
+10 call_function add [1,16]
+11 call_module f5 Linear(in=16,out=16,bias=True) [1,16]
+12 call_function add [1,16]
+13 call_module f6 Linear(in=16,out=2,bias=True) [1,2]
+14 output output [1,2]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0 arg1
+7 -> 8 : arg0
+8 -> 9 : arg0
+9 -> 10 : arg0 arg1
+10 -> 11 : arg0
+11 -> 12 : arg0
+12 -> 13 : arg0
+13 -> 14 : arg0

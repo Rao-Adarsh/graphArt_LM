@@ -1,0 +1,24 @@
+INPUTS 1
+NODES
+0 placeholder x [1,24]
+1 call_module decode Linear(in=24,out=12,bias=False) [1,12]
+2 call_function silu [1,12]
+3 call_module neck Linear(in=12,out=48,bias=False) [1,48]
+4 call_function silu [1,48]
+5 call_module tail Linear(in=48,out=16,bias=False) [1,16]
+6 call_function silu [1,16]
+7 call_module proj Linear(in=16,out=12,bias=False) [1,12]
+8 call_function silu [1,12]
+9 call_module stem Linear(in=12,out=10,bias=False) [1,10]
+10 output output [1,10]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+8 -> 9 : arg0
+9 -> 10 : arg0

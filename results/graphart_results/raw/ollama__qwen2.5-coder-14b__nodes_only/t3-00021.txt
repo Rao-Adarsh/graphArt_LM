@@ -1,0 +1,15 @@
+INPUTS 1
+NODES
+0 placeholder x [1,16]
+1 call_module expand Linear(in=16,out=16,bias=True) [1,16]
+2 call_function sigmoid [1,16]
+3 call_module encode Linear(in=16,out=8,bias=True) [1,8]
+4 call_module proj Linear(in=16,out=8,bias=True) [1,8]
+5 call_function cat [1,16]
+6 call_module merge Linear(in=16,out=16,bias=True) [1,16]
+7 call_module neck Linear(in=16,out=16,bias=True) [1,16]
+8 call_module shrink Linear(in=16,out=16,bias=True) [1,16]
+9 call_function add [1,16]
+10 call_function add [1,16]
+11 call_module pre Linear(in=16,out=2,bias=True) [1,2]
+12 output output [1,2]

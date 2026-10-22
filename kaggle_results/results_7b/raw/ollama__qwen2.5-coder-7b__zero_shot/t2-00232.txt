@@ -1,0 +1,28 @@
+INPUTS 1
+NODES
+0 placeholder x [1,16]
+1 call_module post Linear(in=16,out=16,bias=True) [1,16]
+2 call_function silu silu [1,16]
+3 call_module shrink.0 Linear(in=16,out=16,bias=True) [1,16]
+4 call_function silu silu [1,16]
+5 call_module shrink.1 Linear(in=16,out=16,bias=True) [1,16]
+6 call_function silu silu [1,16]
+7 call_module shrink.2 Linear(in=16,out=16,bias=True) [1,16]
+8 call_function silu silu [1,16]
+9 call_module shrink.3 Linear(in=16,out=16,bias=True) [1,16]
+10 call_function silu silu [1,16]
+11 call_module merge Linear(in=16,out=10,bias=True) [1,10]
+12 output output [1,10]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+8 -> 9 : arg0
+9 -> 10 : arg0
+10 -> 11 : arg0
+11 -> 12 : arg0

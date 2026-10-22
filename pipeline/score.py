@@ -8,6 +8,7 @@ exact=False, F1=0), and the "parsed" column says how often that happened.
 
 import argparse
 import json
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -15,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from graphart.domain import GRAPH_HEADER, ParseError, from_text, to_text
-from graphart.metrics import compare, compare_nodes
+from graphart.metrics import compare, compare_nodes, exact_topology
 
 ROOT = Path(__file__).resolve().parents[1]
 SIZE_BUCKETS = [(3, 8, "3-8 nodes"), (9, 15, "9-15"), (16, 25, "16-25"), (26, 10 ** 6, "26+")]
@@ -49,6 +50,33 @@ def _splice_nodes(reply: str, truth: dict) -> str:
     return to_text({**truth, "edges": []}) + "\n" + edges.strip()
 
 
+# `<id> call_module <path> <Class>(<params>)` -- the parenthesised part is the
+# only piece of a node line written in our own notation.
+_MODULE_PARAMS = re.compile(r"^(\s*\d+\s+call_module\s+\S+\s+[A-Za-z_]\w*)\([^)]*\)", re.M)
+# `Sigmoid [] [1,16]`: an empty bracket pair where a parameterless layer has no
+# parameters. The prompts write the format as `[<Class>(<params>)] [<shape>]`,
+# brackets meaning "optional", and Qwen2.5-Coder 14B read them literally in 18/40
+# zero-shot replies. Only stripped when a shape follows, so a genuine `[]` shape
+# (a 0-d tensor) is never touched.
+_EMPTY_PARAMS = re.compile(r"^(\s*\d+\s+call_module\s+\S+\s+[A-Za-z_]\w*)\s*\[\]\s+(?=\[)", re.M)
+
+
+def _topology_fallback(text: str, truth: dict, mode: str) -> bool:
+    """`exact_topo` for a reply that failed to parse only because of how it
+    wrote module parameters (BatchNorm2d(8) for BatchNorm2d(features=8), or
+    `Sigmoid []` for Sigmoid). Strip them and try again; any other parse failure
+    still scores False."""
+    try:
+        stripped = from_text(_EMPTY_PARAMS.sub(r"\1 ", _MODULE_PARAMS.sub(r"\1", text)))
+    except (ParseError, ValueError, IndexError):
+        return False
+    if not stripped["nodes"]:
+        return False
+    if mode == "nodes":
+        return compare_nodes(stripped, truth)["exact_topo"]
+    return exact_topology(stripped, truth)
+
+
 def score_reply(reply: str, truth: dict, *, mode: str = "full") -> dict:
     """Parse one reply and compare it with the ground truth.
 
@@ -56,13 +84,15 @@ def score_reply(reply: str, truth: dict, *, mode: str = "full") -> dict:
          "nodes" -- the reply lists operations only; edges were not asked for
          "edges" -- the reply lists edges only; the nodes were given in the prompt
     """
+    text = ""
     try:
         text = _splice_nodes(reply, truth) if mode == "edges" else extract_graph_block(reply)
         predicted = from_text(text)
     except (ParseError, ValueError, IndexError) as exc:
         # An empty graph trivially passes the structural checks, so `valid` has to
         # be forced down here -- a reply we cannot read is not a well-formed DAG.
-        result = compare(EMPTY, truth) | {"valid": False}
+        result = compare(EMPTY, truth) | {"valid": False,
+                                          "exact_topo": _topology_fallback(text, truth, mode)}
         return {**result, "parsed": False, "parse_error": str(exc)}
     if not predicted["nodes"]:
         # Parses, but says nothing. An empty graph passes every structural check
@@ -79,7 +109,7 @@ def _mean(values: list[float]) -> float:
 
 
 def summarise(scored: list[dict]) -> dict:
-    keys = ("parsed", "valid", "exact", "node_f1", "edge_f1")
+    keys = ("parsed", "valid", "exact", "exact_topo", "node_f1", "edge_f1")
     out = {}
     for k in keys:
         # None means "not asked for in this mode", which must not average as 0.
@@ -94,13 +124,14 @@ def _cell(value) -> str:
 
 def table(title: str, groups: dict[str, list[dict]]) -> str:
     header = (f"\n{title}\n"
-              f"{'group':<14}{'n':>5}{'parsed':>9}{'valid':>8}{'exact':>8}"
+              f"{'group':<14}{'n':>5}{'parsed':>9}{'valid':>8}{'exact':>8}{'topo':>8}"
               f"{'node F1':>10}{'edge F1':>10}")
     lines = [header, "-" * len(header.splitlines()[-1])]
     for name, rows in groups.items():
         s = summarise(rows)
         lines.append(f"{name:<14}{s['n']:>5}   {_cell(s['parsed'])}  {_cell(s['valid'])}"
-                     f"  {_cell(s['exact'])}    {_cell(s['node_f1'])}    {_cell(s['edge_f1'])}")
+                     f"  {_cell(s['exact'])}  {_cell(s['exact_topo'])}"
+                     f"    {_cell(s['node_f1'])}    {_cell(s['edge_f1'])}")
     return "\n".join(lines)
 
 
@@ -142,6 +173,7 @@ def main() -> None:
     print(table("by tier", by_tier))
     print(table("by graph size", by_size))
     print(table("overall", {"all": scored}))
+    print("topo = exact, ignoring module parameters and function-vs-method spelling")
 
     unparsed = [s for s in scored if not s["parsed"]]
     if unparsed:

@@ -120,10 +120,16 @@ class OllamaBackend:
     # Small local models ramble, and on a CPU every wasted token is ~0.3s. Our
     # targets are ~200 tokens, so 1500 is generous and caps a runaway reply at
     # a few minutes instead of forty.
+    #
+    # The context window is set explicitly because Ollama's default depends on
+    # its version and on how much VRAM it finds, and prompt + reply must both
+    # fit: the cos prompt alone is ~2.7k tokens on a tier-4 sample. Overflowing
+    # it does not fail, it silently drops the start of the prompt.
     def __init__(self, model: str = OLLAMA_DEFAULT, *, max_tokens: int = 1500,
-                 url: str = OLLAMA_URL, **_):
+                 num_ctx: int = 8192, url: str = OLLAMA_URL, **_):
         self.model = model
         self.max_tokens = max_tokens
+        self.num_ctx = num_ctx
         self.url = url
 
     def __call__(self, system: str, user: str) -> str:
@@ -131,7 +137,14 @@ class OllamaBackend:
             "model": self.model,
             "prompt": user,
             "stream": False,
-            "options": {"temperature": 0, "num_predict": self.max_tokens},
+            # Thinking models (Gemma 4 among them) otherwise spend the whole
+            # num_predict budget on hidden reasoning and return an empty answer --
+            # measured: 288 s on a T4 pair for zero characters. Any reasoning we
+            # want is asked for in the prompt (cot, cos), where it is visible.
+            # Models without a thinking mode accept false and ignore it.
+            "think": False,
+            "options": {"temperature": 0, "num_predict": self.max_tokens,
+                        "num_ctx": self.num_ctx},
         }
         if system:
             payload["system"] = system
@@ -140,12 +153,18 @@ class OllamaBackend:
             headers={"Content-Type": "application/json"})
         try:
             with urllib.request.urlopen(request, timeout=600) as response:
-                return json.loads(response.read())["response"]
+                body = json.loads(response.read())
         except urllib.error.URLError as exc:
             raise BackendError(
                 f"could not reach Ollama at {self.url} ({exc}) -- "
                 f"is it running, and has `ollama pull {self.model}` been done?"
             ) from exc
+        if not body.get("response", "").strip():
+            # Same rule as OpenRouter: an empty answer is a failure, never a
+            # cached reply that scores as a model that said nothing.
+            raise RuntimeError(f"empty completion (done_reason={body.get('done_reason')!r}, "
+                               f"thinking {len(body.get('thinking') or '')} chars)")
+        return body["response"]
 
 
 class OpenRouterBackend:

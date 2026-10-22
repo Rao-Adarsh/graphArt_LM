@@ -1,0 +1,26 @@
+INPUTS 1
+NODES
+0 placeholder x [2,32]
+1 call_module fc_1 Linear(in=32,out=32,bias=True) [2,32]
+2 call_module act_1 GELU [2,32]
+3 get_attr extra_head [False]
+4 call_method __getitem__ extra_head [False]
+5 call_method __getitem__ extra_head [False]
+6 call_module fc_2 Linear(in=32,out=32,bias=True) [2,32]
+7 call_module fc_3 Linear(in=32,out=32,bias=True) [2,32]
+8 call_module fc_4 Linear(in=32,out=32,bias=True) [2,32]
+9 call_module fc_5 Linear(in=32,out=32,bias=True) [2,32]
+10 call_module fc_6 Linear(in=32,out=2,bias=True) [2,2]
+11 output output [2,2]
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+8 -> 9 : arg0
+9 -> 10 : arg0
+10 -> 11 : arg0

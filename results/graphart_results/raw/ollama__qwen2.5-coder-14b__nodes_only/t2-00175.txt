@@ -1,0 +1,13 @@
+INPUTS 1
+NODES
+0 placeholder x [2,16]
+1 call_module fc1 Linear(in=16,out=16,bias=True) [2,16]
+2 call_function sigmoid [2,16]
+3 call_module stack1.0 Linear(in=16,out=16,bias=True) [2,16]
+4 call_function sigmoid [2,16]
+5 call_module stack1.2 Linear(in=16,out=16,bias=True) [2,16]
+6 call_function sigmoid [2,16]
+7 call_module stack1.4 Linear(in=16,out=16,bias=True) [2,16]
+8 call_function sigmoid [2,16]
+9 call_module fc2 Linear(in=16,out=10,bias=True) [2,10]
+10 output output [2,10]
