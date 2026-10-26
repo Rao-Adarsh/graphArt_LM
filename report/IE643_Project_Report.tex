@@ -34,6 +34,7 @@
 \usepackage{amsmath}
 \usepackage{mathtools}
 \usepackage{xcolor}
+\usepackage{placeins} % \FloatBarrier: keeps the Results figures inside the Results section
 
 % The following commands set up the lecnum (lecture number)
 % counter and make various numbering schemes work relative
@@ -117,6 +118,9 @@
 \newcommand{\R}{\mathbb{R}}
 % Visible placeholder for text still to be written. Every one must be gone before submitting.
 \newcommand{\writehere}[1]{\textcolor{red}{\textbf{[WRITE:} #1\textbf{]}}}
+% Blue = a draft to rewrite in your own words before submitting.
+% Before submission: change the next line to \newcommand{\draft}[1]{#1}, or remove \draft{...}.
+\newcommand{\draft}[1]{{\color{blue}#1}}
 \graphicspath{{figures/}}
 
 \begin{document}
@@ -137,7 +141,21 @@
 %  - take-away: a perfect in-distribution score + clean leak audit did not show understanding;
 %    behavioural probes with exact ground truth did
 %  - deliverable: a local test interface (paste/upload/generate code -> both graphs + metrics)
-\writehere{Abstract: the task, the approach, and the headline numbers.}
+We ask whether a large language model can read the PyTorch source of a neural network and
+write down its forward-pass graph without running the code. Because \texttt{torch.fx} traces the true graph, 
+every answer can be graded exactly by graph isomorphism. We build a generator of 1,600 programs in four tiers
+ of increasing hidden
+structure, and test two approaches. Prompted zero-shot, accuracy grows with model size, from 5\% of
+graphs with the right topology for Qwen2.5-Coder 1.5B to 60\% for the 14B and 93\% for Gemma 4 31B;
+branching code is the last skill to appear. Fine-tuning the 1.5B model with LoRA for 97 minutes on one
+free GPU raises it to 40 of 40 test graphs exactly right, and 20 of 20 on fresh programs, with no data
+leak. Three probes outside the generator then show what was learned: on real torchvision code the tuned
+model gets none of 21 graphs right and draws most as a straight chain; when an edit changes the wiring,
+it returns the graph of the unedited program 68\% of the time; and it deletes a branch even when its
+flag is \texttt{True}, because every flag in training was \texttt{False}. A perfect in-distribution
+score and a clean leak audit did not show understanding; behavioural probes with exact ground truth
+did. We also provide a test interface that draws the model's graph beside the true one for any pasted,
+uploaded or generated program.
 \end{abstract}
 
 \section{Introduction}
@@ -158,8 +176,55 @@
 %    rule-based error classifier + connectivity metric; the finding that the tuned model learned the
 %    generator's shortcuts; a test interface
 %  - end with the structure of the report (template asks for it; see the \ref labels below)
-\writehere{Introduction: motivation, why it is hard, why LLMs, the research questions, and the
-report's structure (Sections \ref{sec:workflow}--\ref{sec:conclusion}).}
+The allotted task was to study whether LLMs could draw and understand topological graphs. And
+the specific task taken up was that of a familiar one - to \textbf{trace} and generate the forward-pass graph of a
+deep neural network's \texttt{forward()} method (specifically pytorch). This tracing may not be as easy as simply following
+the code line by line, because architectures that are relatively easy to understand for us, may not be so for LLMs,
+even simple loops, conditional statements are out of the ordinary for a rookie LLM. But ofcourse, with the whole premise
+of Deep Learning being ``Deep'', as the architectures become ridiculously more complex, it's almost impossible for a human
+to trace the flow of data, from the input through its processing to it's final form of some kind of prediction. And so we
+ask if these LLMs can be taught to understand such large structures.
+An LLM is a natural choice for such a problem because code is text and text is what we feed these LLMs.
+
+Here are some of the \textbf{Research Questions} we not only started off with but also realised through the project:
+\begin{enumerate}
+	\item How does accuracy fall as the code hides more of the structure? And as
+	the graph grows?
+	\item Is the hard part \emph{reading the code} or \emph{building the graph}?
+	\item Prompting vs fine-tuning vs from scratch: best accuracy for the compute spent?
+	\item Do models learn the rule, or memorise the generator's habits?
+	\item Does a model track dataflow, or match patterns? Controlled edits that keep the graph
+	should not change its answer; edits that change the graph should change it correctly.
+	\item Can a fine-tuned model handle a construct it never saw in training?
+\end{enumerate}
+
+Some things that we ended up building through the project that might be of some importance (for the community, but a greater
+learning outcome for me):
+\begin{enumerate}
+	\item \textbf{An exactly graded benchmark for code $\rightarrow$ graph}
+	\begin{itemize}
+		\item A generator with 4 tiers of difficulty, by how much the code hides the graph: flat, loops, branches, blocks. 1,600 programs.
+		\item Ground truth from torch.fx, graded by graph isomorphism (a schema).
+	\end{itemize}
+	\item \textbf{An evaluation toolkit that says why an answer is wrong, not just whether}
+	\begin{itemize}
+		\item A validator that checks a graph without the answer: cycles, reachability, hierarchy, arity, shapes.
+		\item Graded strictness levels: exact, topology, right graph.
+		\item Plus node and edge F1 and connectivity preservation.
+		\item A rule-based error classifier that puts every miss into one category.
+	\end{itemize}
+	\item \textbf{Applying prompting ideas, compared on multiple models}
+	\begin{itemize}
+		\item Chain-of-simulation: a prompt that traces which node each variable holds. It was best on the two hardest tiers.
+		\item The read/wire decomposition (nodes only vs edges only). It showed the two skills fail independently, both on branching code.
+	\end{itemize}
+	\item \textbf{A fine-tuned small model that solves the in-distribution (important caveat) task}
+	\item \textbf{Behavioural probes of ``understanding''}:
+	\begin{itemize}
+		\item[] Spoiler: Real code, controlled edits and a held-out construct show the tuned model learned the generator's
+		shortcuts
+	\end{itemize}
+\end{enumerate}
 
 \section{Project Workflow} \label{sec:workflow}
 % FACT SHEET -- workflow (bullets are fine here; the template asks for bullets + a diagram)
@@ -178,7 +243,24 @@ report's structure (Sections \ref{sec:workflow}--\ref{sec:conclusion}).}
 	\includegraphics[width=\textwidth]{workflow}
 	\caption{Project workflow, from the problem statement to the closing experiments.}\label{fig:workflow}
 \end{figure}
-\writehere{Workflow: bullet points walking through Figure \ref{fig:workflow}.}
+How we travelled through this project:
+\begin{enumerate}
+	\item Plan of action
+	\item Mid-term Prep Review 
+	\begin{itemize}
+		\item Initially started off with a qiskit quantum circuit DAG graphArt idea
+		\item Built the script generation, and evaluation pipeline for these DAGs 
+	\end{itemize}
+	\item Correction after the prep review 
+	\begin{itemize}
+		\item Shifted focus to the required Deep Neural Network forward pass graph building
+		\item Data generation and evaluation had to be rebuilt (viewpoint changes on the already built ones)
+	\end{itemize}
+	\item Phase 1 prompting on various viable models
+	\item Phase 2 LoRA fine tuning 
+	\item Imporant checks and out of generated - torchvision testing and realizations
+	\item Putting it all together in the requested format
+\end{enumerate}
 
 \section{Literature Survey} \label{sec:litsurvey}
 % FACT SHEET -- literature survey ("comprehensive survey of at least two or three" papers)
@@ -192,8 +274,13 @@ report's structure (Sections \ref{sec:workflow}--\ref{sec:conclusion}).}
 %  - hu2022lora (+ dettmers2023qlora) : the fine-tuning method we used
 %  - hui2024qwencoder, gemma2025gemma3 : the model families we evaluated
 %  - how OUR work differs: exact structural grading, controlled difficulty, edit-based probe
-\writehere{Literature survey: 3--5 papers in your own words, and how this project differs. Cite
-with \texttt{\textbackslash citep\{key\}}, keys in \texttt{references.bib}.}
+LLMs reading and writing graphs as text - \citep{fatemi2024talklikegraph}, 
+Accuracy depends on how a graph is encoded as text; LLMs struggle once graph tasks need multi-step reasoning
+You choose one fixed text encoding and grade it exactly; the graph has to come out of code, not out of a description
+
+Throughout the project, we have mostly experimented with the natural direciton of the problem and honestly, did 
+not rely and take much inspiration from established literature. This could be one of our many wrong choices but 
+this decision was not made out of indifference to the problem.
 
 \section{Proposed Approach or Approaches} \label{sec:our_proj}
 
@@ -203,7 +290,17 @@ with \texttt{\textbackslash citep\{key\}}, keys in \texttt{references.bib}.}
 %  - built: tiered circuit generator, DAG text schema, structural validator,
 %    metrics (valid / exact / node F1 / edge F1), prompting pipeline, prep deck
 %  - lesson carried over: compare GRAPHS (isomorphism), not operation lists
-\writehere{What was built before the review, and the domain correction that followed it.}
+Before the prep-presentation (midterm) review;
+\begin{itemize}
+	\item A complete pipeline for generating and evaluating a tiered qiskit circuit generator. 
+	\item The ground truth was pulled from qiskit's built in \texttt{<circuit\_to\_dag>} function. 
+	\item As mentioned the generator created circuits with multiple levels of ``difficulty'' - basically 
+hiding more and more code with the higher levels. 
+	\item A common schema was developed for isomorphing, the LLM's generated graph to qiskit's standards. 
+	\item Validators were needed to confirm that the LLM produced a real / viable graph. 
+	\item The metrics (valid / exact / node F1 / edge F1) were decided upon and the complete prompting pipeline was built with standard prompting techniques.
+\end{itemize}
+ Nothing else was run or built.
 
 \subsection{Work done after prep-presentation review}
 % FACT SHEET -- after the prep review (the bulk of the report)
@@ -234,14 +331,27 @@ with \texttt{\textbackslash citep\{key\}}, keys in \texttt{references.bib}.}
 %   - LoRA on q,k,v,o,gate,up,down projections, r=16, alpha=32, dropout 0.05 -> 18.5M trainable (1.18%)
 %   - loss: token cross-entropy on the ANSWER tokens only (prompt masked with label -100) -> Eq. (1)
 %   - why LoRA: fits one 16 GB T4; why masking: learn to answer, not to recite the prompt
-\writehere{Task formulation, the graph format, ground truth and validation, the metrics, then the
-two approaches: prompting (including our chain-of-simulation prompt) and LoRA fine-tuning.}
+After the review; task reformulated as: 
+\begin{itemize}
+	\item input : Python source defining an nn.Module + example\_input; and output : graph\_text
+	\item Ground truth: use torch.fx symbolic\_trace + ShapeProp; 
+	\item Validation: Checks for desired replies: acyclic, one output, reachability, arities,
+	module-path tree, shape consistency
+	\item Metrics (graphart/metrics.py): valid; exact = labelled isomorphism; 
+	topo = exact ignoring module parameters and function-vs-method spelling;
+	node/edge F1 on label multisets; shapes scored separately as a `right graph'.
+	\item Error classifier: for precise reasoning of the error / mistake
+	\item Phase 1: Prompting : zero\_shot, few\_shot, cot, cos = chain-of-simulation (interpret forward() line by line,
+	track which node each variable points to), nodes\_only / edges\_only (decomposition).
+	\item Phase 2: LoRA fine-tuning; performed on the smallest Qwen2.5-Coder-1.5B-Instruct,  
+	decoder-only transformer, 1.56B params fusing Kaggle's free GPU access.
+\end{itemize}
 
 % Equations for Approach B (keep, explain each symbol in your text):
-\begin{align}
-	h &= W_0 x + \frac{\alpha}{r} B A x, \qquad A \in \R^{r \times k},\; B \in \R^{d \times r},\; B_{\text{init}} = 0 \label{eq:lora}\\
-	\mathcal{L}(\theta) &= -\frac{1}{|\mathcal{A}|} \sum_{t \in \mathcal{A}} \log p_\theta\left(y_t \mid y_{<t}, x\right) \label{eq:loss}
-\end{align}
+%\begin{align}
+%	h &= W_0 x + \frac{\alpha}{r} B A x, \qquad A \in \R^{r \times k},\; B \in \R^{d \times r},\; B_{\text{init}} = 0 \label{eq:lora}\\
+%	\mathcal{L}(\theta) &= -\frac{1}{|\mathcal{A}|} \sum_{t \in \mathcal{A}} \log p_\theta\left(y_t \mid y_{<t}, x\right) \label{eq:loss}
+%\end{align}
 
 \subsection{Test interface}
 % FACT SHEET -- interface (deliverable: "proper methodology for preparing the interface")
@@ -264,8 +374,13 @@ two approaches: prompting (including our chain-of-simulation prompt) and LoRA fi
 %    exactly what was measured; saved answers make the demo instant; a larger "pensive" model was
 %    dropped: Qwen 14B needs ~10 GB free RAM (laptop: 16 GB total), free Gemma endpoint rate-limited
 %  - safety: tracing executes the pasted code's constructor -> bound to 127.0.0.1 only
-\writehere{How the interface was built: inputs, the processing pipeline, outputs, and the design
-choices (Figure for the interface: a screenshot).}
+\begin{itemize}
+	\item Multiple input methods: paste code, upload a .py file, pick one of 254 examples (40 test, 21 torchvision, 193
+    edits), or GENERATE a fresh program with the project's generator (tier + seed).
+	\item Reference: torch.fx trace of the code
+	\item Prediction: the fine-tuned 1.5B - (easiest on my cpus)
+	\item Draw the final graphs and run the comparison, ouputs side by side graphs, 8 metrics etc.
+\end{itemize}
 
 \section{Data set Details} \label{sec:data}
 % FACT SHEET -- data (README "Dataset" has the tier table)
@@ -305,39 +420,36 @@ choices (Figure for the interface: a screenshot).}
 %    source: github.com/pytorch/vision (torchvision 0.x source, cite web_torchvision); all data is
 %      text (Python source + graph text); data/generated/ is in the repository
 \input{tables/data}
-\writehere{The data: what it is, how it is generated, the tiers (Table \ref{tab:data}), splits,
-preprocessing and the evaluation sets.}
+\begin{itemize}
+	\item Fully synthetically generated using a builder script.
+	\item 4 tiers by how much the code HIDES the graph: T1 flat, T2 loops/Sequential/ModuleList,
+    T3 branches (residual, concat, dead branch, reused layer), T4 blocks (residual CNN, inception,
+    transformer, U-net); 
+\end{itemize}
 
 \section{Experiments} \label{sec:exp}
 
 \textcolor{red}{The team should include all experiments, even those with negative results, and address all experiments that were performed.}
 
 % FACT SHEET -- experiments
-%  Hardware: laptop (Windows, Intel Iris Xe, CPU only) for local runs; Kaggle 2x NVIDIA T4 16 GB
-%    (training uses one); OpenRouter free tier (50 requests/day) for Gemma
-%  Models: Qwen2.5-Coder 1.5B / 7B / 14B (Ollama, 4-bit), Gemma 4 31B (OpenRouter), 1.5B fp16 (HF)
-%  Decoding: greedy / temperature 0; 1500-token cap (4096 for cot/cos, 3200 for torchvision);
-%    Ollama num_ctx 8192, think=false
-%  Training (Phase 2): HF Trainer, AdamW (fused, default betas), lr 2e-4, cosine schedule, 3% warmup,
-%    2 epochs = 160 steps, effective batch 16 (1 x 16 accumulation), max length 2560, fp16,
-%    gradient checkpointing, seed 0, val loss every 40 steps, best checkpoint kept; 97.5 min
-%    val loss 0.0016 -> 0.0003 -> 0.00009 -> 0.00009
-%  Negative results / problems (template asks for ALL experiments):
-%    - first reply failed to parse: prompts defined labels for 2 of 14 layer types -> label table + topo
-%    - cos prompt lacked the Sequential rule -> re-run; did not improve tier 2
-%    - free OpenRouter endpoint ~1 reply / 15-20 min -> moved to Kaggle
-%    - Gemma 4 "thinking" returned empty replies -> think=false
-%    - two Kaggle fine-tuning failures: 35 examples > 2048 tokens; Kaggle's old torchao vs peft
-%  Speeds measured on T4: tuned 1.5B ~24 tok/s, Qwen 7B ~34, Qwen 14B ~16; Gemma ~5
-%  Closing runs (each capped at 2.5 h of Kaggle time): Qwen 14B zero-shot via Ollama on torchvision +
-%    edits; tuned 1.5B (HF, greedy) on torchvision + edits + rq6; held-out adapter trained WITHOUT any
-%    dead-branch program (1112 examples, ONE epoch = 70 steps, 43 min, same hyper-parameters
-%    otherwise) and run on rq6. No reply truncated (all have their edge list).
-%  think=false: matters only for models with a thinking mode (Gemma 4 returned empty replies, 288 s for
-%    0 characters); Qwen2.5-Coder has none, so it changed nothing for any Qwen run
-\writehere{Experimental setup: hardware, models, decoding, the prompting runs, the training
-procedure and hyper-parameters (Eq. \ref{eq:lora}--\ref{eq:loss}), and the experiments that failed
-and what was changed.}
+\begin{itemize}
+	\item Hardware: laptop (Windows, Intel Iris Xe, CPU only) for local runs; Kaggle 2x NVIDIA T4 16 GB (training uses one); OpenRouter free tier (50 requests/day) for Gemma
+	\item Models: Qwen2.5-Coder 1.5B / 7B / 14B (Ollama, 4-bit), Gemma 4 31B (OpenRouter), 1.5B fp16 (HF)
+	\item Decoding: greedy / temperature 0; 1500-token cap (4096 for cot/cos, 3200 for torchvision); Ollama num\_ctx 8192, think=false
+	\item Training (Phase 2): HF Trainer, AdamW (fused, default betas), lr 2e-4, cosine schedule, 3\% warmup, 2 epochs = 160 steps, effective batch 16 (1 x 16 accumulation), max length 2560, fp16, gradient checkpointing, seed 0, val loss every 40 steps, best checkpoint kept; 97.5 min val loss 0.0016 $\rightarrow$ 0.0003 $\rightarrow$ 0.00009 $\rightarrow$ 0.00009
+	\item Negative results / problems (template asks for ALL experiments):
+	\begin{itemize}
+		\item first reply failed to parse: prompts defined labels for 2 of 14 layer types $\rightarrow$ label table + topo
+		\item cos prompt lacked the Sequential rule $\rightarrow$ re-run; did not improve tier 2
+		\item free OpenRouter endpoint $\sim$1 reply / 15-20 min $\rightarrow$ moved to Kaggle
+		\item Gemma 4 ``thinking'' returned empty replies $\rightarrow$ think=false
+		\item two Kaggle fine-tuning failures: 35 examples $>$ 2048 tokens; Kaggle's old torchao vs peft
+	\end{itemize}
+	\item Speeds measured on T4: tuned 1.5B $\sim$24 tok/s, Qwen 7B $\sim$34, Qwen 14B $\sim$16; Gemma $\sim$5
+	\item Closing runs (each capped at 2.5 h of Kaggle time): Qwen 14B zero-shot via Ollama on torchvision + edits; tuned 1.5B (HF, greedy) on torchvision + edits + rq6; held-out adapter trained WITHOUT any dead-branch program (1112 examples, ONE epoch = 70 steps, 43 min, same hyper-parameters otherwise) and run on rq6. No reply truncated (all have their edge list).
+	\item think=false: matters only for models with a thinking mode (Gemma 4 returned empty replies, 288 s for 0 characters); Qwen2.5-Coder has none, so it changed nothing for any Qwen run
+\end{itemize}
+
 
 \section{Results}\label{sec:results}
 % FACT SHEET -- results (figures + tables below; inference text is yours)
@@ -432,10 +544,33 @@ and what was changed.}
 	\includegraphics[width=0.85\textwidth]{qual_lora_reroute}
 	\caption{Qualitative: the fine-tuned 1.5B on a rerouted input answers with the unedited graph.}\label{fig:qual_reroute}
 \end{figure}
+\begin{itemize}
+	\item (RQ1)Zero-shot topology climbs with size:
+		1.5B: 0.05
+		7B: 0.25
+		14B: 0.60
+		Gemma 31B: 0.93
+	\item (RQ1)Chains come before branches. The 7B gets 0 on tiers 3–4; 
+	branching first appears at 14B (T3 0.20, T4 0.40); 
+	Gemma solves tier 3 completely (1.00).
+	\item (RQ2) Decomposition:
+	reading alone (nodes only): 0.70
+	wiring given nodes (edges only): 0.75
+	both at once: 0.60
+	\item (RQ2) Prompts: CoT: 0.53, below zero-shot (0.60). 
+	Its replies are about 2.4× longer (median 1,652 vs 698 characters) and drift from the format more.
+	Few-shot: best overall at 0.70, mostly by fixing format. Raw parse failures fall 21 → 4, exact rises 7 → 19.
+	CoS: best on the hard tiers, but collapses on loops. Therefore, we infer that structured simulation helps where 
+	reasoning is the bottleneck; and giving examples clears out the format.
+	\item (RQ3) Fine-tuning (1.87 percent): LoRA 1.00 on every metric for the worst performing 1.5B model.
+	Found it a little suspicious at first, so audited it for any leakage of information, and so 
+	tested with 20 newly generated programs - still scored perfectly.
+	\item Outside the Generators: THe real test and the real performance on real torchvision codes
+	LoRA performs poorly, worse than the zero shot prompted 14B model; but a better Reach F1. So it's clear 
+	that LoRA fine tuned 1.5B simply memorised shortcuts for the house style generated code. 
+\end{itemize}
 
-\writehere{For each research question: what the figure/table shows, and what you infer from it,
-including the qualitative examples (Figures \ref{fig:qual_14b}--\ref{fig:qual_reroute}).}
-
+\FloatBarrier
 \section{Plan for Novelty Assessment} \label{sec:Plan for Novelty Assessment}
 % FACT SHEET -- novelty plan (assessment 23/25 Nov)
 %  - what is already new: chain-of-simulation prompt; read/wire decomposition; edit-based probe of
@@ -450,7 +585,25 @@ including the qualitative examples (Figures \ref{fig:qual_14b}--\ref{fig:qual_re
 %    for big graphs; fine-tune with edit-augmented data; (interface: DONE, see the Test interface
 %    subsection) -- earlier plan line kept for the record: paste code -> predicted vs
 %    reference graph with differences highlighted
-\writehere{The plan for the novelty assessment.}
+The closing experiments did more than measure accuracy: they showed which shortcuts the
+fine-tuned model took, and each of them points to a change in the data. The plan for the novelty
+assessment is to remove those shortcuts and test whether the model then learns the rule.
+\begin{enumerate}
+	\item \textbf{Remove the shortcuts from the generator (main idea).} Add flags that are sometimes
+	\texttt{True}, varied names for the input, helper classes and helper functions of the kind
+	torchvision uses, and layers outside the current menu such as grouped convolutions and non-square
+	kernels. Retrain the same LoRA set-up and re-run the three probes. Success means the tuned model
+	gets some of the torchvision graphs right (above 0 of 21), answers far fewer meaningful edits with
+	the old graph (well below 68\%), and keeps branches whose flag is \texttt{True}.
+	\item \textbf{Train on edit pairs.} Add training pairs that differ only in their wiring --- the same
+	program with one input rerouted --- so that the answer cannot be produced from the familiar shape
+	of the code. Test on the held-out edit set.
+	\item \textbf{Firmer numbers.} Repeat the main runs over several training seeds and on all 160 test
+	programs, and run the strongest prompted model (Gemma 4 31B) on the edit set, to see whether the
+	old-graph answers also appear at larger scale.
+\end{enumerate}
+Each retraining takes about 100 minutes on a free Kaggle GPU, and the probes, scoring and error
+classification already exist, so the plan fits in the time before the assessment.
 
 \section{Conclusion} \label{sec:conclusion}
 % FACT SHEET -- conclusion
@@ -460,12 +613,27 @@ including the qualitative examples (Figures \ref{fig:qual_14b}--\ref{fig:qual_re
 %  - lesson: a perfect in-distribution score + a clean leak audit still did not show understanding;
 %    behavioural probes with exact ground truth (edits, held-out constructs, real code) did
 %  - significance: exact, free, scalable grading of code->structure understanding
-\writehere{Conclusion: problem, methods, results, significance, and what remains open.}
+This project asked whether a language model can turn the source code of a PyTorch network into
+its forward-pass graph without running it, and whether it understands the structure it draws. Using
+\texttt{torch.fx} as an exact answer key, a tiered generator of programs, and a pipeline that grades
+replies by graph isomorphism, we compared prompting across four models and six prompts with LoRA
+fine-tuning of a small model.
+
+Prompting improves with scale and with the right prompt: topology accuracy rises from 0.05 to 0.93
+between 1.5B and 31B parameters, branching code is solved last, and simulating the code line by line
+helps on the hardest tiers while worked examples help most with the output format. Fine-tuning a 1.5B
+model is enough to solve the task on our generator's programs, including programs it has never seen.
+
+The closing experiments qualify that result. Outside the generator the tuned model fails, and both it
+and the prompted 14B answer changed wiring with the graph the code used to have. The model learned to
+read code from one family, together with shortcuts that family allowed. The broader lesson is about
+evaluation: a perfect score on held-out data and a clean leak audit were not evidence of
+understanding, while small controlled probes with exact ground truth were. Removing those shortcuts
+from the data, and testing again, is the next step.
 
 \section*{Code}
 The code, data generator, prompts, notebooks and results are available at
-\writehere{GitHub link -- the repository is not public yet:
-\url{https://github.com/Rao-Adarsh/graphArt_LM}}.
+\url{https://github.com/Rao-Adarsh/graphArt_LM}.
 
 % Lists every entry while the text has few citations; remove once each source is \citep'd.
 \nocite{*}
