@@ -46,7 +46,67 @@ Kaggle notebook is `notebooks/kaggle_ollama.ipynb`, built by
 `scripts/make_kaggle_notebook.py --models ... --prompts ...`; results come back as a zip
 the user extracts, then `run_prompting --cached-only` + `pipeline.score` as usual.
 
-### 1. Phase 2 — LoRA fine-tune Qwen2.5-Coder 1.5B (planned 22 Oct, not built)
+### 0. The closing experiments (RQ4–RQ6) — built 26 Oct, to run on Kaggle
+
+The Phase 2 result raised the question the project now closes on: did the model learn the
+rule, or our generator's habits? `docs/research_story.md` tells how the questions came
+about. Three new evaluation sets, all with fx ground truth:
+
+| set | built by | what | RQ |
+|---|---|---|---|
+| `torchvision` (21) | `scripts/build_torchvision_set.py` | torchvision's own source: 18 blocks (9–34 nodes) and alexnet / squeezenet1_1 / resnet18 (24–71 nodes); each checked against tracing the real torchvision object | 4 |
+| `edits` (193) | `scripts/build_edit_set.py` | one precise edit each to the test 40: 124 neutral (rename, alias, reorder, dead flag) and 69 meaningful (drop a call, reroute, swap a cat, switch a branch on); classed by fx, not by intent | 5 |
+| held-out adapter | `train_lora.py --exclude-construct dead_branch` | retrained without the 168 train / 25 val programs that have a dead branch; test has 18 | 6 |
+
+Two notebooks, each one unattended Kaggle session **capped at 2.5 h** (the user's limit,
+with a presentation due), sized from measured speeds:
+- `notebooks/kaggle_closing_hf.ipynb` (`--closing-hf`, ~2.1 h, the main run): the Phase 2
+  adapter on torchvision (reply cap 3200) and edits; then the held-out adapter, **one
+  epoch**, scored on the `rq6` probe set (`scripts/build_rq6_probe.py`: 18 dead-branch +
+  22 control tier-3 test programs, + 44 dead-branch edits); then the Phase 2 adapter on the
+  same probe if time is left. Needs the Phase 2 adapter folder uploaded as a Kaggle
+  dataset; it does not retrain it (`RETRAIN_FULL = False`).
+- `notebooks/kaggle_closing_ollama.ipynb` (`--closing-ollama`, ~1.5 h, the contrast): the
+  prompted 14B, zero-shot, on torchvision and edits. Gemma 31B (~5 tok/s) is left for later.
+- Analysis: `scripts/analyze_rq6.py` (topo by group, and how often a never-run branch's
+  layer was written into the answer).
+
+Reading the results: `pipeline.run_prompting --split <set> --cached-only` then
+`pipeline.score`; for edits, `scripts/analyze_edits.py <edits run> <test run>` (it reports
+how many wrong answers to a meaningful edit were the *original* graph). Torchvision
+answers for the two big networks need `--max-tokens 4096`; the longest training answer is
+877 tokens, and six blocks also need longer answers than any the tuned model saw.
+
+### 1. Phase 2 — LoRA fine-tune Qwen2.5-Coder 1.5B (**done 25 Oct: 40/40 exact**)
+
+Result: tuned 1.5B 40/40 exact on the test 40 (untuned base 0/40, topo 0.05). Training
+97.5 min on one T4, val loss 0.00009. The adapter is in
+`kaggle_results/results_finetune_1.5b/qwen2.5-coder-1.5b-graphart-lora/` (not in git; ~37 MB);
+its replies are in `results/hf__qwen2.5-coder-1.5b-graphart-lora__zero_shot.jsonl`.
+
+**Leak found:** `scripts/build_dataset.py` deduplicates by target *text*, so isomorphic
+graphs with a different node order slip through. 4 of the 160 test graphs duplicate a
+train graph (t2-00251, t4-00340, t4-00271, t4-00130); only t4-00340 is in the scored 40
+(tuned model 39/39 without it). Splits left unchanged for comparability. Fix the dedup
+(canonical form or isomorphism check) before building any new dataset.
+
+**Next:** the result is in-distribution. Phase 4 — `torchvision` real code — is now the most
+informative step: run the tuned 1.5B, Qwen 14B and Gemma 31B on it. Also cheap and worth
+doing: score the tuned adapter on all 160 test samples (inference only).
+
+The build notes, kept for reference:
+
+**Built:** the `hf` backend (`pipeline/backends.py`), `scripts/train_lora.py`,
+`requirements-finetune.txt`, and `notebooks/kaggle_finetune.ipynb`
+(`make_kaggle_notebook.py --finetune`). Plain `transformers` `Trainer` + `peft`; `trl` was
+not needed. Tested locally on a tiny Qwen2.5 and on the real 0.5B (CPU). transformers 5
+renamed things: `warmup_ratio` is gone (a float `warmup_steps` is a ratio), `torch_dtype` is
+`dtype`. When the zip comes back, extract it to a new folder, copy
+`results/raw/hf__*` into `results/raw/`, then
+`run_prompting --backend hf --model qwen2.5-coder-1.5b-graphart-lora --prompt zero_shot --stratify 10 --cached-only`
+(and the same with `--model Qwen/Qwen2.5-Coder-1.5B-Instruct` for the base).
+
+The plan as agreed:
 
 **Question.** Can a fine-tuned 1.5B — zero-shot topo 0.05 today — match the prompted 14B
 (0.60) or Gemma 31B (0.93)? This is research question 3, answered on free hardware.
@@ -61,7 +121,7 @@ split (160) picks the checkpoint; **the test split is never seen in training or
 selection.** ~1.6M tokens per epoch, ~85% of them prompt (masked out of the loss).
 
 **Training.** LoRA r=16, alpha=32, dropout 0.05, on all attention and MLP projections;
-lr 2e-4 cosine, 3% warmup, 2 epochs, effective batch 16, max length 2048, fp16 with
+lr 2e-4 cosine, 3% warmup, 2 epochs, effective batch 16 (1 × 16 accumulation), max length 2560, fp16 with
 gradient checkpointing. One Kaggle T4. Rough estimate 1–1.5 h training; check it in the
 smoke step.
 
@@ -134,6 +194,20 @@ Open issues before the prompting comparison is final:
   4-bit quantised copy. The Kaggle `zero_shot` run doubles as a check that the two agree.
 
 ## Things that bit us, worth not repeating
+
+- **The first Phase 2 Kaggle run died in 2 minutes**: 35 of the 1440 train/val examples are
+  longer than 2048 tokens (longest 2330), and local tests had only used the first few
+  samples. `--max-len` is now 2560, and `train_lora.py --check-only` encodes every example
+  in seconds without loading the model — run it locally before any GPU session. The same
+  run also showed the retry logic treating a crash as "not learning"; exit codes now
+  separate the two (3 not learning, 4 NaN loss, anything else a crash).
+- **The second Phase 2 run died in 2 minutes on Kaggle's preinstalled packages**: Kaggle
+  ships torchao 0.10, and peft 0.21 raises (rather than skipping it) when an optional
+  quantisation library is older than it supports — torchao < 0.16 or an old gptqmodel.
+  The notebook now uninstalls both; we use neither. Local tests could not see it because
+  torchao was not installed here. Reproduced locally by installing torchao 0.10.0.
+- **Estimate token counts with the real tokenizer**, not characters ÷ 3.5: that guessed a
+  mean of ~1220 where the truth is ~1400.
 
 - **The prompts named the parameter format for two layer classes only**, so the first real
   reply — a correct graph — failed to parse on `BatchNorm2d(8)`. All node-producing prompts

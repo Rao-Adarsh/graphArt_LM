@@ -1,0 +1,194 @@
+id,category,detail,edit
+t1-00123~alias,miswired,,alias
+t1-00123~dead_flag,notation,,dead_flag
+t1-00123~drop_call,gave_original,,drop_call
+t1-00019~alias,notation,,alias
+t1-00019~dead_flag,notation,,dead_flag
+t1-00019~drop_call,notation,,drop_call
+t1-00343~rename,notation,,rename
+t1-00343~alias,notation,,alias
+t1-00343~dead_flag,notation,,dead_flag
+t1-00343~reroute,gave_original,,reroute
+t1-00343~drop_call,gave_original,,drop_call
+t1-00053~rename,notation,,rename
+t1-00053~alias,notation,,alias
+t1-00053~dead_flag,notation,,dead_flag
+t1-00053~drop_call,notation,,drop_call
+t1-00376~rename,notation,,rename
+t1-00376~alias,notation,,alias
+t1-00376~dead_flag,notation,,dead_flag
+t1-00376~reroute,gave_original,,reroute
+t1-00057~rename,exact,,rename
+t1-00057~alias,exact,,alias
+t1-00057~dead_flag,exact,,dead_flag
+t1-00057~reroute,gave_original,,reroute
+t1-00057~drop_call,exact,,drop_call
+t1-00261~alias,exact,,alias
+t1-00261~dead_flag,exact,,dead_flag
+t1-00261~drop_call,exact,,drop_call
+t1-00008~rename,notation,,rename
+t1-00008~alias,notation,,alias
+t1-00008~dead_flag,notation,,dead_flag
+t1-00008~reroute,miswired,,reroute
+t1-00061~alias,notation,,alias
+t1-00061~dead_flag,notation,,dead_flag
+t1-00061~drop_call,notation,,drop_call
+t1-00107~rename,notation,,rename
+t1-00107~alias,notation,,alias
+t1-00107~dead_flag,exact,,dead_flag
+t1-00107~drop_call,gave_original,,drop_call
+t2-00232~rename,exact,,rename
+t2-00232~alias,exact,,alias
+t2-00232~dead_flag,exact,,dead_flag
+t2-00232~reroute,gave_original,,reroute
+t2-00194~rename,notation,,rename
+t2-00194~alias,notation,,alias
+t2-00194~dead_flag,notation,,dead_flag
+t2-00194~reroute,gave_original,,reroute
+t2-00194~drop_call,gave_original,,drop_call
+t2-00113~rename,wrong_ops,missing: call/sigmoid | extra: -,rename
+t2-00113~alias,wrong_ops,missing: call/sigmoid | extra: -,alias
+t2-00113~dead_flag,spelling,,dead_flag
+t2-00113~reroute,gave_original,,reroute
+t2-00175~alias,spelling,,alias
+t2-00175~dead_flag,spelling,,dead_flag
+t2-00175~drop_call,exact,,drop_call
+t2-00014~rename,notation,,rename
+t2-00014~alias,notation,,alias
+t2-00014~dead_flag,notation,,dead_flag
+t2-00014~reroute,gave_original,,reroute
+t2-00014~drop_call,gave_original,,drop_call
+t2-00076~alias,notation,,alias
+t2-00076~dead_flag,notation,,dead_flag
+t2-00076~drop_call,gave_original,,drop_call
+t2-00008~alias,notation,,alias
+t2-00008~dead_flag,notation,,dead_flag
+t2-00008~drop_call,gave_original,,drop_call
+t2-00352~rename,exact,,rename
+t2-00352~alias,exact,,alias
+t2-00352~dead_flag,exact,,dead_flag
+t2-00352~drop_call,gave_original,,drop_call
+t2-00103~rename,notation,,rename
+t2-00103~alias,notation,,alias
+t2-00103~dead_flag,notation,,dead_flag
+t2-00103~reroute,gave_original,,reroute
+t2-00103~drop_call,notation,,drop_call
+t2-00223~alias,miswired,,alias
+t2-00223~dead_flag,notation,,dead_flag
+t2-00223~drop_call,gave_original,,drop_call
+t3-00021~rename,commutative,,rename
+t3-00021~alias,miswired,,alias
+t3-00021~reorder,arg_slots,,reorder
+t3-00021~dead_flag,commutative,,dead_flag
+t3-00021~swap_cat,gave_original,,swap_cat
+t3-00021~branch_on,miswired,,branch_on
+t3-00021~reroute,gave_original,,reroute
+t3-00021~drop_call,commutative,,drop_call
+t3-00090~rename,wrong_ops,missing: call_module/fc3/Linear | extra: call_module/fc2/Linear; call_module/fc3_1/Linear,rename
+t3-00090~alias,wrong_ops,missing: call_module/fc3/Linear | extra: call_module/fc2/Linear; call_module/fc3_1/Linear,alias
+t3-00090~reorder,wrong_ops,missing: call_module/fc3/Linear | extra: call_module/fc2/Linear; call_module/fc3_1/Linear,reorder
+t3-00090~dead_flag,wrong_ops,missing: call_module/fc3/Linear | extra: call_module/fc3_1/Linear,dead_flag
+t3-00090~swap_cat,wrong_ops,missing: call_module/fc3/Linear | extra: call_module/fc2/Linear; call_module/fc3_1/Linear,swap_cat
+t3-00090~branch_on,wrong_ops,missing: call_module/fc3/Linear | extra: call_module/fc3_1/Linear,branch_on
+t3-00090~drop_call,wrong_ops,missing: - | extra: call_module/fc2/Linear,drop_call
+t3-00232~rename,unparseable,"line 5: cannot parse '2 call_module act_1 GELU [] [2,32]'",rename
+t3-00232~alias,unparseable,"line 5: cannot parse '2 call_module act_1 GELU [] [2,32]'",alias
+t3-00232~reorder,unparseable,"line 5: cannot parse '2 call_module act_1 GELU [] [2,32]'",reorder
+t3-00232~dead_flag,unparseable,"line 5: cannot parse '2 call_module act_1 GELU [] [2,32]'",dead_flag
+t3-00232~branch_on,unparseable,"line 5: cannot parse '2 call_module act_1 GELU [] [2,32]'",branch_on
+t3-00232~reroute,unparseable,"line 5: cannot parse '2 call_module act_1 GELU [] [2,32]'",reroute
+t3-00232~drop_call,unparseable,"line 5: cannot parse '2 call_module act_1 GELU [] [2,32]'",drop_call
+t3-00382~rename,miswired,,rename
+t3-00382~alias,miswired,,alias
+t3-00382~reorder,miswired,,reorder
+t3-00382~dead_flag,miswired,,dead_flag
+t3-00382~branch_on,miswired,,branch_on
+t3-00382~reroute,miswired,,reroute
+t3-00382~drop_call,wrong_ops,missing: - | extra: call_module/layer2/Linear,drop_call
+t3-00006~rename,miswired,,rename
+t3-00006~alias,commutative,,alias
+t3-00006~reorder,commutative,,reorder
+t3-00006~dead_flag,commutative,,dead_flag
+t3-00006~swap_cat,gave_original,,swap_cat
+t3-00006~reroute,miswired,,reroute
+t3-00006~drop_call,commutative,,drop_call
+t3-00221~rename,wrong_ops,missing: - | extra: call/gelu,rename
+t3-00221~alias,exact,,alias
+t3-00221~reorder,commutative,,reorder
+t3-00221~dead_flag,exact,,dead_flag
+t3-00221~reroute,wrong_ops,missing: - | extra: call/gelu,reroute
+t3-00221~drop_call,miswired,,drop_call
+t3-00059~rename,commutative,,rename
+t3-00059~alias,miswired,,alias
+t3-00059~reorder,commutative,,reorder
+t3-00059~dead_flag,miswired,,dead_flag
+t3-00059~reroute,miswired,,reroute
+t3-00059~drop_call,commutative,,drop_call
+t3-00157~rename,commutative,,rename
+t3-00157~alias,exact,,alias
+t3-00157~reorder,commutative,,reorder
+t3-00157~dead_flag,exact,,dead_flag
+t3-00157~reroute,miswired,,reroute
+t3-00157~drop_call,commutative,,drop_call
+t3-00096~rename,unparseable,"line 5: cannot parse '2 call_module a1 Tanh [] [1,24]'",rename
+t3-00096~alias,unparseable,"line 5: cannot parse '2 call_module a1 Tanh [] [1,24]'",alias
+t3-00096~reorder,unparseable,"line 5: cannot parse '2 call_module a1 Tanh [] [1,24]'",reorder
+t3-00096~dead_flag,unparseable,"line 5: cannot parse '2 call_module a1 Tanh [] [1,24]'",dead_flag
+t3-00096~reroute,unparseable,"line 5: cannot parse '2 call_module a1 Tanh [] [1,24]'",reroute
+t3-00202~rename,wrong_ops,missing: call_module/f2/Linear | extra: call_module/f2_1/Linear,rename
+t3-00202~alias,wrong_ops,missing: call_module/f2/Linear | extra: call_module/f2_1/Linear,alias
+t3-00202~reorder,wrong_ops,missing: call_module/f2/Linear | extra: call_module/f2_1/Linear,reorder
+t3-00202~dead_flag,wrong_ops,missing: call_module/f2/Linear | extra: -,dead_flag
+t3-00202~swap_cat,wrong_ops,missing: call_module/f2/Linear | extra: call_module/f2_1/Linear,swap_cat
+t3-00202~reroute,wrong_ops,missing: call_module/f2/Linear | extra: call_module/f2_1/Linear,reroute
+t3-00202~drop_call,wrong_ops,missing: call_module/f2/Linear | extra: call_module/f2_1/Linear,drop_call
+t4-00158~rename,wrong_ops,missing: call/getitem x2 | extra: -,rename
+t4-00158~alias,wrong_ops,missing: call/getitem x2 | extra: -,alias
+t4-00158~dead_flag,wrong_ops,missing: call/getitem x2 | extra: -,dead_flag
+t4-00158~reroute,wrong_ops,missing: call/getitem x2 | extra: -,reroute
+t4-00173~rename,miswired,,rename
+t4-00173~alias,unparseable,"line 5: cannot parse '2 call_module a1 GELU [] [1,16,32,32]'",alias
+t4-00173~dead_flag,unparseable,"line 5: cannot parse '2 call_module a1 GELU [] [1,16,32,32]'",dead_flag
+t4-00173~swap_cat,unparseable,"line 5: cannot parse '2 call_module a1 GELU [] [1,16,32,32]'",swap_cat
+t4-00173~reroute,unparseable,"line 5: cannot parse '2 call_module a1 GELU [] [1,16,32,32]'",reroute
+t4-00395~rename,notation,,rename
+t4-00395~alias,notation,,alias
+t4-00395~reorder,arg_slots,,reorder
+t4-00395~dead_flag,unparseable,"line 5: cannot parse '2 call_module act_1 Sigmoid [] [1,8,32,32]'",dead_flag
+t4-00395~swap_cat,gave_original,,swap_cat
+t4-00395~reroute,gave_original,,reroute
+t4-00120~rename,arg_slots,,rename
+t4-00120~alias,arg_slots,,alias
+t4-00120~dead_flag,arg_slots,,dead_flag
+t4-00120~reroute,miswired,,reroute
+t4-00120~drop_call,arg_slots,,drop_call
+t4-00149~rename,exact,,rename
+t4-00149~alias,exact,,alias
+t4-00149~reorder,arg_slots,,reorder
+t4-00149~dead_flag,exact,,dead_flag
+t4-00149~swap_cat,gave_original,,swap_cat
+t4-00149~reroute,gave_original,,reroute
+t4-00149~drop_call,exact,,drop_call
+t4-00138~alias,unparseable,"line 5: cannot parse '2 call_module a1 Sigmoid [] [1,16,32,32]'",alias
+t4-00138~dead_flag,unparseable,"line 5: cannot parse '2 call_module a1 Sigmoid [] [1,16,32,32]'",dead_flag
+t4-00138~drop_call,unparseable,"line 7: cannot parse '4 call_module a2 Sigmoid [] [1,16,32,32]'",drop_call
+t4-00340~rename,notation,,rename
+t4-00340~alias,miswired,,alias
+t4-00340~reorder,unparseable,"line 5: cannot parse '2 call_module a1 Sigmoid [] [1,8,16,16]'",reorder
+t4-00340~dead_flag,notation,,dead_flag
+t4-00340~swap_cat,gave_original,,swap_cat
+t4-00340~reroute,gave_original,,reroute
+t4-00258~rename,wrong_ops,missing: call/getitem x2 | extra: -,rename
+t4-00258~alias,wrong_ops,missing: call/getitem x2 | extra: -,alias
+t4-00258~dead_flag,wrong_ops,missing: call/getitem x2 | extra: -,dead_flag
+t4-00258~reroute,wrong_ops,missing: call/getitem x2 | extra: -,reroute
+t4-00258~drop_call,wrong_ops,missing: call/getitem x2 | extra: -,drop_call
+t4-00281~rename,notation,,rename
+t4-00281~alias,miswired,,alias
+t4-00281~dead_flag,notation,,dead_flag
+t4-00281~swap_cat,miswired,,swap_cat
+t4-00281~reroute,gave_original,,reroute
+t4-00083~rename,wrong_ops,missing: call/getitem x2 | extra: -,rename
+t4-00083~alias,wrong_ops,missing: call/getitem x2 | extra: -,alias
+t4-00083~dead_flag,wrong_ops,missing: call/getitem x2 | extra: -,dead_flag
+t4-00083~reroute,wrong_ops,missing: call/getitem x2 | extra: -,reroute

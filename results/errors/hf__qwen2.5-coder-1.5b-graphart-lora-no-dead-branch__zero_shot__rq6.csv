@@ -1,0 +1,85 @@
+id,category,detail
+t3-00021,exact,
+t3-00090,wrong_ops,missing: - | extra: call_module/fc2/Linear
+t3-00232,wrong_ops,missing: - | extra: call_module/fc_2/Linear
+t3-00382,unparseable,"line 6: cannot parse '3 call_module layer2 Linear(in=16,out=16,bias=True) [2,16] (if use_extra)'"
+t3-00006,exact,
+t3-00221,exact,
+t3-00059,exact,
+t3-00157,exact,
+t3-00096,arg_slots,
+t3-00202,exact,
+t3-00123,exact,
+t3-00372,miswired,
+t3-00113,exact,
+t3-00095,wrong_ops,missing: call_module/f6/Linear | extra: -
+t3-00350,wrong_ops,missing: - | extra: call_module/f3/Linear
+t3-00362,exact,
+t3-00031,unparseable,"line 6: cannot parse '3 call_module f2 Linear(in=16,out=16,bias=True) [1,16] (only if wide is True)'"
+t3-00104,unparseable,"line 6: cannot parse '3 call_module fc2 Linear(in=32,out=32,bias=True) [1,32] (only if wide is True)'"
+t3-00036,wrong_ops,missing: - | extra: call_module/fc_5/Linear
+t3-00018,exact,
+t3-00146,exact,
+t3-00358,wrong_ops,missing: - | extra: call_module/stem/Linear
+t3-00124,miswired,
+t3-00170,exact,
+t3-00238,exact,
+t3-00083,exact,
+t3-00111,exact,
+t3-00299,unparseable,"line 6: cannot parse '3 call_module fc2 Linear(in=32,out=32,bias=True) [2,32] (only if wide is True)'"
+t3-00338,exact,
+t3-00185,wrong_ops,missing: - | extra: call_module/fc_2/Linear
+t3-00086,wrong_ops,missing: - | extra: call_module/fc_2/Linear
+t3-00297,wrong_ops,missing: - | extra: call_module/layer6/Linear
+t3-00271,exact,
+t3-00076,exact,
+t3-00235,wrong_ops,missing: - | extra: call_module/layer2/Linear
+t3-00239,wrong_ops,missing: call_module/head/Linear | extra: -
+t3-00270,exact,
+t3-00052,wrong_ops,missing: - | extra: call_module/fc_3/Linear
+t3-00352,notation,
+t3-00097,exact,
+t1-00123~dead_flag,exact,
+t1-00019~dead_flag,exact,
+t1-00343~dead_flag,exact,
+t1-00053~dead_flag,wrong_ops,missing: call_module/conv2/Conv2d | extra: call_module/conv1/Conv2d
+t1-00376~dead_flag,notation,
+t1-00057~dead_flag,exact,
+t1-00261~dead_flag,exact,
+t1-00008~dead_flag,notation,
+t1-00061~dead_flag,wrong_ops,missing: - | extra: call_module/fc_1/Linear
+t1-00107~dead_flag,exact,
+t2-00232~dead_flag,exact,
+t2-00194~dead_flag,exact,
+t2-00113~dead_flag,notation,
+t2-00175~dead_flag,exact,
+t2-00014~dead_flag,exact,
+t2-00076~dead_flag,exact,
+t2-00008~dead_flag,wrong_ops,missing: - | extra: call_module/fc1/Linear x2
+t2-00352~dead_flag,exact,
+t2-00103~dead_flag,exact,
+t2-00223~dead_flag,exact,
+t3-00021~dead_flag,exact,
+t3-00021~branch_on,wrong_ops,missing: call_module/post/Linear | extra: -
+t3-00090~dead_flag,wrong_ops,missing: - | extra: call_module/fc2/Linear
+t3-00090~branch_on,miswired,
+t3-00232~dead_flag,wrong_ops,missing: - | extra: call_module/fc_2/Linear
+t3-00232~branch_on,miswired,
+t3-00382~dead_flag,wrong_ops,missing: - | extra: call_module/layer2/Linear
+t3-00382~branch_on,exact,
+t3-00006~dead_flag,notation,
+t3-00221~dead_flag,exact,
+t3-00059~dead_flag,wrong_ops,missing: - | extra: call_module/fc_1/Linear
+t3-00157~dead_flag,wrong_ops,missing: call/silu | extra: -
+t3-00096~dead_flag,arg_slots,
+t3-00202~dead_flag,exact,
+t4-00158~dead_flag,wrong_ops,missing: call/getitem x2; call/add | extra: call_module/layer1/LayerNorm
+t4-00173~dead_flag,exact,
+t4-00395~dead_flag,exact,
+t4-00120~dead_flag,exact,
+t4-00149~dead_flag,exact,
+t4-00138~dead_flag,exact,
+t4-00340~dead_flag,exact,
+t4-00258~dead_flag,exact,
+t4-00281~dead_flag,exact,
+t4-00083~dead_flag,wrong_ops,missing: call/getitem x2 | extra: call_module/n2/LayerNorm; call_module/f1/Linear

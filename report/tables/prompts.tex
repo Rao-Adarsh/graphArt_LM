@@ -1,0 +1,18 @@
+\begin{table}[!h]
+\centering
+\small
+\begin{tabular}{lcccccccc}
+\hline
+Prompt (Qwen 14B) & T1 & T2 & T3 & T4 & topo & exact & right graph & parsed \\
+\hline
+zero-shot & 1.00 & 0.80 & 0.20 & 0.40 & 0.60 & 0.17 & 0.70 & 0.47 \\
+few-shot & 1.00 & 0.90 & 0.30 & 0.60 & 0.70 & 0.47 & 0.78 & 0.90 \\
+CoT & 0.90 & 0.80 & 0.10 & 0.30 & 0.53 & 0.15 & 0.60 & 0.55 \\
+CoS (ours) & 1.00 & 0.30 & 0.70 & 0.70 & 0.68 & 0.30 & 0.68 & 0.62 \\
+nodes only & 1.00 & 0.80 & 0.40 & 0.60 & 0.70 & 0.17 & -- & 0.47 \\
+edges only & 1.00 & 1.00 & 0.40 & 0.60 & 0.75 & 0.75 & -- & 1.00 \\
+full task & 1.00 & 0.80 & 0.20 & 0.40 & 0.60 & 0.17 & 0.70 & 0.47 \\
+\hline
+\end{tabular}
+\caption{Prompting strategies and the read/wire decomposition on Qwen2.5-Coder 14B, same 40 programs. \emph{right graph} applies to whole-graph replies only.}\label{tab:prompts}
+\end{table}

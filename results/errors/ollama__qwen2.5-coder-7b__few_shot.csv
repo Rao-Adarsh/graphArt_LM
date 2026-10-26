@@ -1,0 +1,41 @@
+id,category,detail
+t1-00123,notation,
+t1-00019,exact,
+t1-00343,wrong_ops,missing: call/sigmoid x2; call_module/flat1/Flatten | extra: call/act1; call/act2; call/flat1
+t1-00053,notation,
+t1-00376,notation,
+t1-00057,exact,
+t1-00261,exact,
+t1-00008,notation,
+t1-00061,exact,
+t1-00107,notation,
+t2-00232,exact,
+t2-00194,exact,
+t2-00113,wrong_ops,missing: call_module/stack1.4/Linear; call_module/stack1.6/Linear | extra: call_module/stack1.1/Linear; call_module/stack1.3/Linear
+t2-00175,wrong_ops,missing: call_module/stack1.4/Linear | extra: call_module/stack1.1/Linear
+t2-00014,exact,
+t2-00076,exact,
+t2-00008,exact,
+t2-00352,exact,
+t2-00103,exact,
+t2-00223,wrong_ops,missing: - | extra: call/cat
+t3-00021,wrong_ops,missing: - | extra: call_module/post/Linear
+t3-00090,notation,
+t3-00232,wrong_ops,missing: call/add x2 | extra: call_module/fc_2/Linear
+t3-00382,miswired,
+t3-00006,miswired,
+t3-00221,miswired,
+t3-00059,miswired,
+t3-00157,miswired,
+t3-00096,wrong_ops,missing: call/tanh; call/add x3 | extra: -
+t3-00202,arg_slots,
+t4-00158,unparseable,"line 15: cannot parse '1 -> 2 : query, key, value'"
+t4-00173,wrong_ops,missing: call/gelu | extra: call_module/a3/gelu
+t4-00395,arg_slots,
+t4-00120,arg_slots,
+t4-00149,miswired,
+t4-00138,arg_slots,
+t4-00340,wrong_ops,missing: call/sigmoid; call/cat | extra: -
+t4-00258,unparseable,"line 15: cannot parse '1 -> 2 : query, key, value'"
+t4-00281,miswired,
+t4-00083,unparseable,"line 15: cannot parse '1 -> 2 : query, key, value'"

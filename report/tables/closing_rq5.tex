@@ -1,0 +1,13 @@
+\begin{table}[!h]
+\centering
+\small
+\begin{tabular}{lccccccc}
+\hline
+edits & solved & neutral & meaningful & gave original & reroute & swap cat & drop call \\
+\hline
+Qwen 14B, prompted & 24 & 61 / 70 & 8 / 36 & 23 / 36 & 0 / 14 & 0 / 4 & 8 / 18 \\
+Qwen 1.5B + LoRA & 40 & 116 / 124 & 17 / 69 & 47 / 69 & 0 / 27 & 0 / 9 & 17 / 29 \\
+\hline
+\end{tabular}
+\caption{RQ5, controlled edits of the test programs, counting only the programs each model got right before the edit (\emph{solved}). Columns count right graphs, except \emph{gave original}: meaningful edits answered with the graph of the unedited program.}\label{tab:closing_rq5}
+\end{table}

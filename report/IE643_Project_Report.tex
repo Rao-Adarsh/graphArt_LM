@@ -1,0 +1,407 @@
+% IE 643 final report -- Team Pensieve.
+%
+% HOW THIS FILE WORKS
+%   * The preamble and header are the course template, unchanged.
+%   * Each section has a FACT SHEET in % comments: the numbers, names and file
+%     pointers that section needs, as keywords -- not sentences. Write the prose
+%     yourself from them, then delete the fact sheet.
+%   * Red [WRITE: ...] marks show where your text goes; \writehere renders them.
+%     Search the PDF for red before submitting -- none may remain.
+%   * Figures and tables are generated from the results by
+%     scripts/make_report_figures.py; rerun it if the results change.
+%   * Compile:  latexmk -pdf IE643_Project_Report.tex   (MiKTeX is installed)
+
+\documentclass[twoside,english]{article}
+\setlength{\oddsidemargin}{0.25 in}
+\setlength{\evensidemargin}{-0.25 in}
+\setlength{\topmargin}{-0.6 in}
+\setlength{\textwidth}{6.5 in}
+\setlength{\textheight}{8.5 in}
+\setlength{\headsep}{0.75 in}
+\setlength{\parindent}{0 in}
+\setlength{\parskip}{0.1 in}
+
+%
+% ADD PACKAGES here:
+%
+
+\usepackage{amsmath,amsfonts,graphicx,algorithm,caption}
+\usepackage[noend]{algpseudocode}
+\usepackage{hyperref}
+\usepackage{natbib}
+\usepackage[document]{ragged2e}
+\usepackage{graphicx} %package to manage images
+\usepackage{amsmath}
+\usepackage{mathtools}
+\usepackage{xcolor}
+
+% The following commands set up the lecnum (lecture number)
+% counter and make various numbering schemes work relative
+% to the lecture number.
+%
+\newcounter{lecnum}
+\renewcommand{\thepage}{\arabic{page}}
+\renewcommand{\thesection}{\arabic{section}}
+\renewcommand{\theequation}{\arabic{equation}}
+\renewcommand{\thefigure}{\arabic{figure}}
+\renewcommand{\thetable}{\arabic{table}}
+\makeatletter
+\def\BState{\State\hskip-\ALG@thistlm}
+\makeatother
+%
+% The following macro is used to generate the header.
+%
+\newcommand{\lecture}[4]{
+   \pagestyle{myheadings}
+   \thispagestyle{plain}
+   \newpage
+   %\setcounter{lecnum}{#1}
+   \setcounter{page}{1}
+   \noindent
+   \begin{center}
+   \framebox{
+      \vbox{\vspace{2mm}
+    \hbox to 6.28in { {\bf IE 643: Deep Learning - Theory and Practice
+		\hfill July-Dec 2026} }
+       \vspace{4mm}
+       \hbox to 6.28in { {\Large \hfill Project Report: #1  \hfill} }
+       \vspace{2mm}
+       \vspace{2mm}
+       \hbox to 6.28in { {\it Team Name: #2 \hfill Team Members: #3} }
+       %\vspace{2mm}}
+       %\hbox to 6.28in { {\it Due Date: 01-August-2018} }
+      \vspace{2mm}}
+   }
+   \end{center}
+%   \markboth{Assignment #1: #2}{Assignment #1: #2}
+
+   %{\bf Note}: {\it LaTeX template courtesy of UC Berkeley EECS dept.}
+
+   %{\bf Disclaimer}: {\it These notes have not been subjected to the
+   %usual scrutiny reserved for formal publications.  They may be distributed
+   %outside this class only with the permission of the Instructor.}
+   \vspace*{4mm}
+}
+%
+% Convention for citations is authors' initials followed by the year.
+% For example, to cite a paper by Leighton and Maggs you would type
+% \cite{LM89}, and to cite a paper by Strassen you would type \cite{S69}.
+% (To avoid bibliography problems, for now we redefine the \cite command.)
+% Also commands that create a suitable format for the reference list.
+\renewcommand{\cite}[1]{[#1]}
+\def\beginrefs{\begin{list}%
+        {[\arabic{equation}]}{\usecounter{equation}
+         \setlength{\leftmargin}{2.0truecm}\setlength{\labelsep}{0.4truecm}%
+         \setlength{\labelwidth}{1.6truecm}}}
+\def\endrefs{\end{list}}
+\def\bibentry#1{\item[\hbox{[#1]}]}
+
+%Use this command for a figure; it puts a figure in wherever you want it.
+%usage: \fig{NUMBER}{SPACE-IN-INCHES}{CAPTION}
+\newcommand{\fig}[3]{
+			\vspace{#2}
+			\begin{center}
+			Figure #1:~#3
+			\end{center}
+	}
+% Use these for theorems, lemmas, proofs, etc.
+\newtheorem{theorem}{Theorem}[lecnum]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{claim}[theorem]{Claim}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{definition}[theorem]{Definition}
+\newenvironment{proof}{{\bf Proof:}}{\hfill\rule{2mm}{2mm}}
+
+% **** IF YOU WANT TO DEFINE ADDITIONAL MACROS FOR YOURSELF, PUT THEM HERE:
+\newcommand{\R}{\mathbb{R}}
+% Visible placeholder for text still to be written. Every one must be gone before submitting.
+\newcommand{\writehere}[1]{\textcolor{red}{\textbf{[WRITE:} #1\textbf{]}}}
+\graphicspath{{figures/}}
+
+\begin{document}
+\lecture{Making Large Models Draw Topological Graphs}{Pensieve}{Adarsh A Rao (24B2132)}
+
+\begin{abstract}
+% FACT SHEET -- abstract (write last; ~150-200 words; must state the significant results)
+%  - task: read nn.Module source -> forward-pass graph (ops + which value feeds which argument slot), no execution
+%  - ground truth: torch.fx symbolic_trace, exact + free; graded by labelled graph isomorphism
+%  - data: own generator, 4 tiers of hidden structure, 1600 programs, 1280/160/160
+%  - prompting: 4 models (Qwen2.5-Coder 1.5B/7B/14B, Gemma 4 31B), 6 prompts
+%    -> zero-shot topology: 0.05 -> 0.25 -> 0.60 -> 0.93 with scale
+%  - fine-tuning: LoRA on 1.5B, 97 min on one free T4 -> 40/40 exact (beats prompted 31B: 30/40)
+%  - verified: no leak; 20/20 on fresh programs whose graphs appear in no split
+%  - closing questions: real code (torchvision), controlled edits, held-out construct
+\writehere{Abstract: the task, the approach, and the headline numbers.}
+\end{abstract}
+
+\section{Introduction}
+% FACT SHEET -- introduction
+%  - the allotted task: draw the forward-pass graph of a deep network from its forward() and module class
+%  - why it matters: architecture diagrams, documentation, debugging, code review, education;
+%    tracing needs code that RUNS (all imports, weights/shapes, valid input) -- not always available
+%    (snippets, papers, broken envs); reading code is what humans do
+%  - why it is hard: code hides the graph -- loops/Sequential/ModuleList must be unrolled, dead
+%    branches dropped, residuals = long-range edges, argument ORDER matters (a - b, cat([a,b]))
+%  - why deep learning: code is text; LLMs pretrained on code; fine-tuning adapts them
+%  - research questions (README "Research questions"):
+%      RQ1 difficulty vs hidden structure (tiers), RQ2 reading vs wiring,
+%      RQ3 prompting vs fine-tuning, RQ4 real code, RQ5 dataflow vs pattern-matching,
+%      RQ6 unseen construct
+%  - contributions (list them): exact-graded benchmark with tiers; CoS prompt; read/wire
+%    decomposition; LoRA result; leak audit + fresh-program check; edit-based probe of understanding
+%  - end with the structure of the report (template asks for it; see the \ref labels below)
+\writehere{Introduction: motivation, why it is hard, why LLMs, the research questions, and the
+report's structure (Sections \ref{sec:workflow}--\ref{sec:conclusion}).}
+
+\section{Project Workflow} \label{sec:workflow}
+% FACT SHEET -- workflow (bullets are fine here; the template asks for bullets + a diagram)
+%  - 4 Sep: plan of action
+%  - prep review (20 Sep deck, docs/presentation/Pensieve_IE643_CourseProject_Prep.pdf):
+%    domain was Qiskit quantum-circuit DAGs (circuit_to_dag ground truth)
+%  - TA correction after the prep review: the statement asks for a DNN forward pass ->
+%    pivot to PyTorch; circuit work kept in graphart/legacy_qiskit/
+%  - 16-17 Oct: fx extractor, text schema, validator, tiered generator, dataset, 6 prompts
+%  - 17-22 Oct: Phase 1 prompting (OpenRouter free tier, local Ollama, Kaggle T4s)
+%  - 23-25 Oct: Phase 2 LoRA fine-tuning on Kaggle (two failed runs fixed first)
+%  - 25-26 Oct: leak audit, fresh-program check, closing experiments RQ4-RQ6
+\begin{figure}[!h]
+	\centering
+	\includegraphics[width=\textwidth]{workflow}
+	\caption{Project workflow, from the problem statement to the closing experiments.}\label{fig:workflow}
+\end{figure}
+\writehere{Workflow: bullet points walking through Figure \ref{fig:workflow}.}
+
+\section{Literature Survey} \label{sec:litsurvey}
+% FACT SHEET -- literature survey ("comprehensive survey of at least two or three" papers)
+%  READ THESE YOURSELF and summarise in your own words -- the rules give zero for AI-written
+%  paper summaries. Pick 3-5. Why each is relevant (one line each):
+%  - reed2022torchfx      : where our ground truth comes from; what symbolic tracing records
+%  - fatemi2024talklikegraph, wang2023nlgraph : how LLMs read/write graphs as text
+%  - gu2024cruxeval, zaremba2014execute, nye2021scratchpad : LLMs predicting what code does;
+%    scratchpad/simulation = the idea behind our CoS prompt
+%  - wei2022cot, brown2020gpt3 : chain-of-thought (our cot control) and few-shot prompting
+%  - hu2022lora (+ dettmers2023qlora) : the fine-tuning method we used
+%  - hui2024qwencoder, gemma2025gemma3 : the model families we evaluated
+%  - how OUR work differs: exact structural grading, controlled difficulty, edit-based probe
+\writehere{Literature survey: 3--5 papers in your own words, and how this project differs. Cite
+with \texttt{\textbackslash citep\{key\}}, keys in \texttt{references.bib}.}
+
+\section{Proposed Approach or Approaches} \label{sec:our_proj}
+
+\subsection{Work done before prep-presentation review}
+% FACT SHEET -- before the prep review
+%  - domain: Qiskit circuit DAGs; ground truth from qiskit circuit_to_dag
+%  - built: tiered circuit generator, DAG text schema, structural validator,
+%    metrics (valid / exact / node F1 / edge F1), prompting pipeline, prep deck
+%  - lesson carried over: compare GRAPHS (isomorphism), not operation lists
+\writehere{What was built before the review, and the domain correction that followed it.}
+
+\subsection{Work done after prep-presentation review}
+% FACT SHEET -- after the prep review (the bulk of the report)
+%  Task formulation
+%   - input: Python source defining an nn.Module + example_input; output: graph text
+%     (INPUTS / NODES "<id> <op> <target> [Class(params)] [shape]" / EDGES "a -> b : argK")
+%   - edges carry ARGUMENT SLOTS (order-sensitive ops); one edge per (src,dst) listing all slots
+%  Ground truth + validation (graphart/extract.py, validate.py)
+%   - torch.fx symbolic_trace + ShapeProp; function aliases normalised (x+y, torch.add, x.add -> add)
+%   - validator checks a reply WITHOUT the answer: acyclic, one output, reachability, arities,
+%     module-path tree, shape consistency
+%  Metrics (graphart/metrics.py): valid; exact = labelled isomorphism (networkx, VF2);
+%     topo = exact ignoring module parameters and function-vs-method spelling (added after the first
+%     reply failed on notation, not structure); node/edge F1 on label multisets; shapes scored separately
+%  right graph (added after the closing runs, applied to EVERY run, scorer itself unchanged):
+%     topo, also forgiving an activation written as a function where the code has a layer (or the
+%     reverse), F.max_pool2d vs max_pool2d, and a+b vs b+a; still needs every operation + connection
+%  Error classifier (scripts/classify_errors.py): one category per reply by isomorphism tests in a
+%     fixed order -- right graph (exact/notation/spelling/commutative), narrow error (arg_slots;
+%     coarse_* = a block drawn as one box, checked by RE-TRACING the real code with that block kept
+%     whole), wrong (gave_original/miswired/wrong_ops/unparseable). Re-trace reproduces 274/274 stored
+%     truths; 11/11 constructed test cases land in the right category; per-reply CSVs in results/errors/
+%  Approach A -- prompting (6 prompts, prompts/*.txt): zero_shot, few_shot (3 train examples),
+%     cot (control), cos = chain-of-simulation (OURS: interpret forward() line by line, track which node
+%     each variable points to), nodes_only / edges_only (decomposition)
+%  Approach B -- LoRA fine-tuning (scripts/train_lora.py)
+%   - base: Qwen2.5-Coder-1.5B-Instruct, decoder-only transformer, 1.56B params
+%   - LoRA on q,k,v,o,gate,up,down projections, r=16, alpha=32, dropout 0.05 -> 18.5M trainable (1.18%)
+%   - loss: token cross-entropy on the ANSWER tokens only (prompt masked with label -100) -> Eq. (1)
+%   - why LoRA: fits one 16 GB T4; why masking: learn to answer, not to recite the prompt
+\writehere{Task formulation, the graph format, ground truth and validation, the metrics, then the
+two approaches: prompting (including our chain-of-simulation prompt) and LoRA fine-tuning.}
+
+% Equations for Approach B (keep, explain each symbol in your text):
+\begin{align}
+	h &= W_0 x + \frac{\alpha}{r} B A x, \qquad A \in \R^{r \times k},\; B \in \R^{d \times r},\; B_{\text{init}} = 0 \label{eq:lora}\\
+	\mathcal{L}(\theta) &= -\frac{1}{|\mathcal{A}|} \sum_{t \in \mathcal{A}} \log p_\theta\left(y_t \mid y_{<t}, x\right) \label{eq:loss}
+\end{align}
+
+\section{Data set Details} \label{sec:data}
+% FACT SHEET -- data (README "Dataset" has the tier table)
+%  - fully synthetic, text (Python source -> graph text); generator graphart/generate.py; builder
+%    scripts/build_dataset.py --per-tier 400 (seed 0 reproduces it)
+%  - 4 tiers by how much the code HIDES the graph: T1 flat, T2 loops/Sequential/ModuleList,
+%    T3 branches (residual, concat, dead branch, reused layer), T4 blocks (residual CNN, inception,
+%    transformer, U-net); nodes T1 7/10.1/14, T2 8/10.4/13, T3 8/12.0/16, T4 12/15.1/25
+%  - 1600 programs, 80/10/10 per tier -> 1280 / 160 / 160; dedup by graph text
+%  - style randomised separately from structure (14 class names, 5 model variable names,
+%    4 import blocks, naming schemes, functional vs module activations) -> against house-style shortcuts
+%  - token length (Qwen tokenizer, zero-shot prompt + answer): mean 1400, max 2330
+%  - evaluation subsets: stratified 40 (10/tier) for every run; fresh 20 (unused seed);
+%    closing: torchvision 21 (real source, 18 blocks + alexnet/squeezenet1_1/resnet18),
+%    edits 193 (124 neutral, 69 meaningful), rq6 probe 84
+%  - found later: dedup by TEXT let 4/160 test graphs duplicate a train graph (other node order);
+%    1 in the scored 40 (t4-00340); left in place for comparability, reported
+%  - what the generator never varies (counted over the 1280 training programs vs the 21 torchvision):
+%    own block classes 0 vs 10; grouped convs 0 vs 5; tuple kernels 0 vs 3; un-shortened F.
+%    functions 0 vs 7; the input is ALWAYS called x (1280/1280); every `if self.<flag>:` branch has
+%    the flag False (168/168, none True). It varies how code is SPELLED, not how it is ORGANISED.
+%  - torchvision split, fixed by a mechanical rule BEFORE the tuned model's results were opened:
+%    in-distribution 5 (none of the constructs above, no assert) / unseen 16.
+%    DISCLOSE: the rule missed helper FUNCTIONS (conv3x3/conv1x1, all 3 ResNet samples) and the input
+%    name (MNASNet uses `input`); split kept as fixed
+%  - rq6 probe 84 = control 22, dead_branch 18, dead_flag 40 (dead `if` added), branch_on 4 (flag True)
+\input{tables/data}
+\writehere{The data: what it is, how it is generated, the tiers (Table \ref{tab:data}), splits,
+preprocessing and the evaluation sets.}
+
+\section{Experiments} \label{sec:exp}
+
+\textcolor{red}{The team should include all experiments, even those with negative results, and address all experiments that were performed.}
+
+% FACT SHEET -- experiments
+%  Hardware: laptop (Windows, Intel Iris Xe, CPU only) for local runs; Kaggle 2x NVIDIA T4 16 GB
+%    (training uses one); OpenRouter free tier (50 requests/day) for Gemma
+%  Models: Qwen2.5-Coder 1.5B / 7B / 14B (Ollama, 4-bit), Gemma 4 31B (OpenRouter), 1.5B fp16 (HF)
+%  Decoding: greedy / temperature 0; 1500-token cap (4096 for cot/cos, 3200 for torchvision);
+%    Ollama num_ctx 8192, think=false
+%  Training (Phase 2): HF Trainer, AdamW (fused, default betas), lr 2e-4, cosine schedule, 3% warmup,
+%    2 epochs = 160 steps, effective batch 16 (1 x 16 accumulation), max length 2560, fp16,
+%    gradient checkpointing, seed 0, val loss every 40 steps, best checkpoint kept; 97.5 min
+%    val loss 0.0016 -> 0.0003 -> 0.00009 -> 0.00009
+%  Negative results / problems (template asks for ALL experiments):
+%    - first reply failed to parse: prompts defined labels for 2 of 14 layer types -> label table + topo
+%    - cos prompt lacked the Sequential rule -> re-run; did not improve tier 2
+%    - free OpenRouter endpoint ~1 reply / 15-20 min -> moved to Kaggle
+%    - Gemma 4 "thinking" returned empty replies -> think=false
+%    - two Kaggle fine-tuning failures: 35 examples > 2048 tokens; Kaggle's old torchao vs peft
+%  Speeds measured on T4: tuned 1.5B ~24 tok/s, Qwen 7B ~34, Qwen 14B ~16; Gemma ~5
+%  Closing runs (each capped at 2.5 h of Kaggle time): Qwen 14B zero-shot via Ollama on torchvision +
+%    edits; tuned 1.5B (HF, greedy) on torchvision + edits + rq6; held-out adapter trained WITHOUT any
+%    dead-branch program (1112 examples, ONE epoch = 70 steps, 43 min, same hyper-parameters
+%    otherwise) and run on rq6. No reply truncated (all have their edge list).
+%  think=false: matters only for models with a thinking mode (Gemma 4 returned empty replies, 288 s for
+%    0 characters); Qwen2.5-Coder has none, so it changed nothing for any Qwen run
+\writehere{Experimental setup: hardware, models, decoding, the prompting runs, the training
+procedure and hyper-parameters (Eq. \ref{eq:lora}--\ref{eq:loss}), and the experiments that failed
+and what was changed.}
+
+\section{Results}\label{sec:results}
+% FACT SHEET -- results (figures + tables below; inference text is yours)
+%  RQ1 scale/tiers (Fig scale, Tab scale): chains before branches; 7B 0/20 on T3-T4; branching from 14B
+%  RQ2 decomposition (Tab prompts): nodes_only 0.70, edges_only 0.75, full 0.60 ~ 0.70 x 0.75;
+%     both break on T3 (0.40 each) -> no extra cost for doing both at once
+%  prompts (Fig prompts): cot 0.53 < zero_shot 0.60; cos best on T3 (7/10 vs 1-4/10) but weak on
+%     T2 containers (extra Sequential node / one-level nesting); 14B "[]" format slip in 18/40
+%  why CoT/CoS did not simply win (right graph per tier, of 10: zero 10/10/4/4=28, few 10/10/5/6=31,
+%     CoS 10/3/7/7=27, CoT 9/9/3/3=24): CoS best on T3+T4 (14/20 vs few 11, zero 8) -- tracing is
+%     what those tiers need -- but collapses on T2; without T2 CoS leads 24/30 vs 21/30. CoT worse
+%     everywhere: reply 2.4x longer (median 1652 vs 698 chars), no task procedure, more format drift
+%     (8 unreadable vs 4); CoT gains reported at far larger scale, short-answer tasks (wei2022cot).
+%     Few-shot wins by FORMAT: raw parse failures 21 -> 4, exact 7 -> 19. 10/tier: T2 collapse real,
+%     T3/T4 lead suggestive only
+%  Gemma misses: all notation (x.tanh as function, 7) or tuple-unpacking getitem (3 transformers)
+%  RQ3 (Fig finetune, Tab finetune): LoRA 1.5B 40/40 exact; untuned 0/40; Gemma 30/40 exact, 37/40 topo
+%  leak audit: no answer in prompts; train/val only; 0 identical programs/answers; 0 replies copy a
+%     training answer; same scorer gives untuned 0/40; 1/40 isomorphic duplicate -> 39/39
+%  fresh programs: 20/20 exact (unused seed, none isomorphic to any split)
+%  Right-graph column (Tabs scale/prompts/finetune): ranking never changes, gaps do -- LoRA 40 vs
+%     Gemma 37 (vs 40 vs 30 on exact); 7B 10 -> 17. The untuned 1.5B is 4/40 even with spelling
+%     forgiven: invents layers, drops them, draws Sequential as one box -> it could NOT read the code
+%  RQ4 real code (Fig closing, Tab closing_rq4): right graph 14B 4/21, LoRA 0/21; in-distribution
+%     14B 4/5, LoRA 0/5; unseen 0/16 both. LoRA draws 16 of its 18 readable replies as ONE STRAIGHT
+%     CHAIN (only 4 of 21 truths are chains; on our test it does so 0 of 18 times): SqueezeNet Fire
+%     loses its branch and cat, ResNet BasicBlock loses the skip and gains a `downsample` conv that is
+%     None in the code. 14B: 2 of 14. 14B failures: 7 unparseable (broke stated rules for g= and k=[..]
+%     in situations never exemplified), 3 spelling-only (relu as function), 3 coarse (block as a box)
+%  RQ5 edits (Tab closing_rq5), programs each model solved first (14B 24, LoRA 40): neutral right
+%     87% / 94%; meaningful right 22% / 25%; meaningful answered with the UNEDITED graph 64% / 68%;
+%     reroute followed 0/14 / 0/27; swap cat 0/4 / 0/9; drop call 8/18 / 17/29. Spot-checked by hand
+%     (fc1(h) -> fc1(x): reply keeps the old h -> fc1 edge). Reorder: of 13, 7 only swap + operands
+%     (same computation; strict exact counts it wrong), 6 put cat inputs in written order
+%  RQ6 held-out (Tab closing_rq6): held-out adapter dead branch 2/18, writes the dead layer in 18/58;
+%     full adapter 18/18 BUT deletes the layer when the flag is True, 0/4 -- training never had a True
+%     flag, so "delete what is under if self.flag" was a correct rule on that data
+%  Answer to "rule or generator?": mostly the generator. Real reading within the family (40/40,
+%     20/20 fresh, untuned 4/40) but leaning on shortcuts the data allowed; as a reader of code in
+%     general the tuned 1.5B is weaker than the prompted 14B. The edit signature is SHARED by the 14B,
+%     so not caused by fine-tuning. Caveats: n=4 flag-True, n=5 in-distribution, one seed, held-out
+%     adapter 1 epoch vs 2 (control 1.00 -> 0.86 partly that), all-160 re-score not run
+\begin{figure}[!h]
+	\centering
+	\includegraphics[width=\textwidth]{scale_by_tier}
+	\caption{Zero-shot: share of the 40 test programs with the correct topology, by tier and model size.}\label{fig:scale}
+\end{figure}
+\input{tables/scale}
+
+\begin{figure}[!h]
+	\centering
+	\includegraphics[width=\textwidth]{prompts_by_tier}
+	\caption{Prompting strategies on Qwen2.5-Coder 14B, by tier (topology correct).}\label{fig:prompts}
+\end{figure}
+\input{tables/prompts}
+
+\begin{figure}[!h]
+	\centering
+	\includegraphics[width=\textwidth]{finetune_vs_prompting}
+	\caption{The LoRA-tuned 1.5B against its untuned base and the best prompted models.}\label{fig:finetune}
+\end{figure}
+\input{tables/finetune}
+
+\begin{figure}[!h]
+	\centering
+	\includegraphics[width=\textwidth]{closing}
+	\caption{Closing experiments. RQ4: torchvision, right graph on in-distribution and unseen-construct samples, and the share of readable replies drawn as one straight chain. RQ5: controlled edits on programs each model solved first. RQ6: the full adapter against one trained without dead branches.}\label{fig:closing}
+\end{figure}
+\input{tables/closing_rq4}
+\input{tables/closing_rq5}
+\input{tables/closing_rq6}
+
+\writehere{For each research question: what the figure/table shows, and what you infer from it.
+Include qualitative examples (a reply beside its reference: \texttt{docs/figures/comparison.png}).}
+
+\section{Plan for Novelty Assessment} \label{sec:Plan for Novelty Assessment}
+% FACT SHEET -- novelty plan (assessment 23/25 Nov)
+%  - what is already new: chain-of-simulation prompt; read/wire decomposition; edit-based probe of
+%    "understanding" (neutral vs meaningful edits, "answered the original graph" signature);
+%    held-out-construct fine-tuning
+%  - the closing runs say what to fix first: remove the shortcuts the data allowed -- flags that are
+%    sometimes True, varied input names, helper classes AND functions, layers outside the menu
+%    (grouped convs, tuple kernels) -- retrain, and re-run RQ4-RQ6 to see if the chain/original-graph
+%    signatures go; edit-augmented training (pairs that differ only in wiring)
+%  - next: Gemma 31B on the edits; all 160 test; length generalisation
+%    to whole networks (answers up to ~3000 tokens vs 877 in training); curriculum or chunked output
+%    for big graphs; fine-tune with edit-augmented data; interface: paste code -> predicted vs
+%    reference graph with differences highlighted
+\writehere{The plan for the novelty assessment.}
+
+\section{Conclusion} \label{sec:conclusion}
+% FACT SHEET -- conclusion
+%  - problem, methods, headline numbers (scale curve; 1.5B+LoRA 40/40 + 20/20 fresh; leak audit)
+%  - closing answer: fine-tuning learned the generator's family, with shortcuts (chains on real code,
+%    0/27 rerouted inputs, flag never read); both models redraw the familiar graph on edits (64%/68%)
+%  - lesson: a perfect in-distribution score + a clean leak audit still did not show understanding;
+%    behavioural probes with exact ground truth (edits, held-out constructs, real code) did
+%  - significance: exact, free, scalable grading of code->structure understanding
+\writehere{Conclusion: problem, methods, results, significance, and what remains open.}
+
+\section*{Code}
+The code, data generator, prompts, notebooks and results are available at
+\writehere{GitHub link -- the repository is not public yet:
+\url{https://github.com/Rao-Adarsh/graphArt_LM}}.
+
+% Lists every entry while the text has few citations; remove once each source is \citep'd.
+\nocite{*}
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

@@ -1,0 +1,41 @@
+id,category,detail
+t1-00123,exact,
+t1-00019,exact,
+t1-00343,wrong_ops,missing: call/sigmoid x2 | extra: call/relu x2
+t1-00053,spelling,
+t1-00376,miswired,
+t1-00057,spelling,
+t1-00261,spelling,
+t1-00008,notation,
+t1-00061,exact,
+t1-00107,notation,
+t2-00232,wrong_ops,missing: - | extra: call/silu x3
+t2-00194,exact,
+t2-00113,spelling,
+t2-00175,spelling,
+t2-00014,exact,
+t2-00076,exact,
+t2-00008,exact,
+t2-00352,spelling,
+t2-00103,spelling,
+t2-00223,exact,
+t3-00021,wrong_ops,missing: call/add x2 | extra: get_attr/wide/False; call/__getitem__; call_module/post/Linear; call/__add__ x2
+t3-00090,unparseable,invalid literal for int() with base 10: 'False'
+t3-00232,unparseable,invalid literal for int() with base 10: 'False'
+t3-00382,unparseable,invalid literal for int() with base 10: 'False'
+t3-00006,miswired,
+t3-00221,miswired,
+t3-00059,wrong_ops,missing: call/tanh; call/add x2; call_module/fc_5/Linear | extra: -
+t3-00157,miswired,
+t3-00096,wrong_ops,missing: call/add x3 | extra: call_module/add/add x5
+t3-00202,unparseable,"line 13: cannot parse '10 call_method add h h [1,16]'"
+t4-00158,wrong_ops,missing: call/getitem x2 | extra: -
+t4-00173,wrong_ops,missing: call/cat | extra: -
+t4-00395,unparseable,"line 9: cannot parse '6 call_function cat [1,24,32,32] : arg0 arg1 arg2'"
+t4-00120,wrong_ops,missing: call/cat | extra: -
+t4-00149,miswired,
+t4-00138,arg_slots,
+t4-00340,wrong_ops,missing: call/sigmoid; call/cat | extra: -
+t4-00258,wrong_ops,missing: call/getitem x2 | extra: -
+t4-00281,wrong_ops,missing: call/cat | extra: -
+t4-00083,unparseable,line 5: parameter '16' is not key=value

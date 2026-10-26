@@ -22,6 +22,7 @@ OLLAMA_DEFAULT = "qwen2.5-coder:1.5b"
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OPENROUTER_DEFAULT = "qwen/qwen-2.5-coder-32b-instruct"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+HF_DEFAULT = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
 
 
 class BackendError(RuntimeError):
@@ -236,10 +237,72 @@ class OpenRouterBackend:
         return content
 
 
+class HFBackend:
+    """A Hugging Face model run in-process, optionally with a LoRA adapter on top.
+
+    This is how Phase 2 is scored: the fine-tuned adapter and its untuned base go
+    through the same runner and scorer as every prompted model. `model` is either
+    a hub id (Qwen/Qwen2.5-Coder-1.5B-Instruct) or a local adapter directory; an
+    adapter names its own base in adapter_config.json. Free -- it runs wherever
+    this process runs (a Kaggle GPU, or slowly on a CPU).
+
+    Decoding matches the Ollama runs: greedy, 1500 new tokens at most, the
+    model's own chat template.
+    """
+
+    name = "hf"
+
+    def __init__(self, model: str = HF_DEFAULT, *, max_tokens: int = 1500, **_):
+        try:
+            import torch
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+        except ImportError as exc:  # pragma: no cover - depends on the environment
+            raise BackendError(
+                "transformers is not installed -- "
+                "run: .venv/Scripts/pip install -r requirements-finetune.txt") from exc
+        from pathlib import Path
+
+        self._torch = torch
+        self.max_tokens = max_tokens
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        dtype = torch.float16 if self.device == "cuda" else torch.float32
+
+        path = Path(model)
+        adapter = path if (path / "adapter_config.json").exists() else None
+        if adapter:
+            base = json.loads((adapter / "adapter_config.json").read_text())["base_model_name_or_path"]
+            # The run is named after the adapter directory, so the results of a
+            # tuned model never mix with its base's in results/raw/.
+            self.model = adapter.name
+        else:
+            base, self.model = model, model
+        self.tokenizer = AutoTokenizer.from_pretrained(adapter or base)
+        net = AutoModelForCausalLM.from_pretrained(base, dtype=dtype)
+        if adapter:
+            from peft import PeftModel
+            net = PeftModel.from_pretrained(net, adapter).merge_and_unload()
+        self.net = net.to(self.device).eval()
+
+    def __call__(self, system: str, user: str) -> str:
+        messages = ([{"role": "system", "content": system}] if system else []) + \
+                   [{"role": "user", "content": user}]
+        text = self.tokenizer.apply_chat_template(messages, tokenize=False,
+                                                  add_generation_prompt=True)
+        inputs = self.tokenizer(text, return_tensors="pt").to(self.device)
+        with self._torch.no_grad():
+            out = self.net.generate(**inputs, max_new_tokens=self.max_tokens, do_sample=False,
+                                    pad_token_id=self.tokenizer.eos_token_id)
+        reply = self.tokenizer.decode(out[0, inputs["input_ids"].shape[1]:],
+                                      skip_special_tokens=True)
+        if not reply.strip():
+            raise RuntimeError("empty completion")
+        return reply
+
+
 BACKENDS = {"anthropic": AnthropicBackend, "ollama": OllamaBackend,
-            "openrouter": OpenRouterBackend, "mock": MockBackend}
+            "openrouter": OpenRouterBackend, "hf": HFBackend, "mock": MockBackend}
 DEFAULT_MODELS = {"anthropic": ANTHROPIC_DEFAULT, "ollama": OLLAMA_DEFAULT,
-                  "openrouter": OPENROUTER_DEFAULT, "mock": "echo"}
+                  "openrouter": OPENROUTER_DEFAULT, "hf": HF_DEFAULT, "mock": "echo"}
 
 
 def make_backend(name: str, model: str | None = None, **kwargs):

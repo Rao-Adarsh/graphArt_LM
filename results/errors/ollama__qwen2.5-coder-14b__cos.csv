@@ -1,0 +1,41 @@
+id,category,detail
+t1-00123,notation,
+t1-00019,exact,
+t1-00343,notation,
+t1-00053,notation,
+t1-00376,notation,
+t1-00057,exact,
+t1-00261,exact,
+t1-00008,notation,
+t1-00061,notation,
+t1-00107,exact,
+t2-00232,exact,
+t2-00194,wrong_ops,missing: call/silu x4; call_module/block_1.0.0/Linear; call_module/block_1.1.0/Linear; call_module/block_1.2.0/Linear; call_module/block_1.3.0/Linear | extra: call_module/block_1.0/Linear; call_module/block_1.1/Linear; call_module/block_1.2/Linear; call_module/block_1.3/Linear
+t2-00113,wrong_ops,missing: - | extra: call_module/stack1/Sequential
+t2-00175,wrong_ops,missing: - | extra: call_module/stack1/Sequential
+t2-00014,wrong_ops,missing: call/tanh x2; call_module/block1.0.0/Linear; call_module/block1.1.0/Linear | extra: call_module/block1.0/Linear; call_module/block1.1/Linear
+t2-00076,wrong_ops,missing: - | extra: call_module/stack1/Sequential
+t2-00008,wrong_ops,missing: - | extra: call_module/stack1/Sequential
+t2-00352,exact,
+t2-00103,exact,
+t2-00223,wrong_ops,missing: call/tanh x3; call_module/b1.0.0/Linear; call_module/b1.1.0/Linear; call_module/b1.2.0/Linear | extra: call_module/b1.0/Linear; call_module/b1.1/Linear; call_module/b1.2/Linear
+t3-00021,notation,
+t3-00090,notation,
+t3-00232,exact,
+t3-00382,miswired,
+t3-00006,arg_slots,
+t3-00221,exact,
+t3-00059,notation,
+t3-00157,exact,
+t3-00096,exact,
+t3-00202,arg_slots,
+t4-00158,wrong_ops,missing: call/getitem x2 | extra: -
+t4-00173,notation,
+t4-00395,notation,
+t4-00120,notation,
+t4-00149,exact,
+t4-00138,notation,
+t4-00340,notation,
+t4-00258,wrong_ops,missing: call/getitem x2 | extra: -
+t4-00281,notation,
+t4-00083,wrong_ops,missing: call/getitem x2 | extra: -

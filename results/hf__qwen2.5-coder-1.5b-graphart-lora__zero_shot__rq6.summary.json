@@ -1,0 +1,80 @@
+{
+  "results": "hf__qwen2.5-coder-1.5b-graphart-lora__zero_shot__rq6.jsonl",
+  "mode": "full",
+  "overall": {
+    "parsed": 1.0,
+    "valid": 1.0,
+    "exact": 0.952,
+    "exact_topo": 0.952,
+    "node_f1": 0.998,
+    "edge_f1": 0.992,
+    "n": 84
+  },
+  "by_tier": {
+    "tier 1": {
+      "parsed": 1.0,
+      "valid": 1.0,
+      "exact": 1.0,
+      "exact_topo": 1.0,
+      "node_f1": 1.0,
+      "edge_f1": 1.0,
+      "n": 10
+    },
+    "tier 2": {
+      "parsed": 1.0,
+      "valid": 1.0,
+      "exact": 1.0,
+      "exact_topo": 1.0,
+      "node_f1": 1.0,
+      "edge_f1": 1.0,
+      "n": 10
+    },
+    "tier 3": {
+      "parsed": 1.0,
+      "valid": 1.0,
+      "exact": 0.926,
+      "exact_topo": 0.926,
+      "node_f1": 0.997,
+      "edge_f1": 0.987,
+      "n": 54
+    },
+    "tier 4": {
+      "parsed": 1.0,
+      "valid": 1.0,
+      "exact": 1.0,
+      "exact_topo": 1.0,
+      "node_f1": 1.0,
+      "edge_f1": 1.0,
+      "n": 10
+    }
+  },
+  "by_size": {
+    "3-8 nodes": {
+      "parsed": 1.0,
+      "valid": 1.0,
+      "exact": 1.0,
+      "exact_topo": 1.0,
+      "node_f1": 1.0,
+      "edge_f1": 1.0,
+      "n": 5
+    },
+    "9-15": {
+      "parsed": 1.0,
+      "valid": 1.0,
+      "exact": 0.942,
+      "exact_topo": 0.942,
+      "node_f1": 0.998,
+      "edge_f1": 0.99,
+      "n": 69
+    },
+    "16-25": {
+      "parsed": 1.0,
+      "valid": 1.0,
+      "exact": 1.0,
+      "exact_topo": 1.0,
+      "node_f1": 1.0,
+      "edge_f1": 1.0,
+      "n": 10
+    }
+  }
+}

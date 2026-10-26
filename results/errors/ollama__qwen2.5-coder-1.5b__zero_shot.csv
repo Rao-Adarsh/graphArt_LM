@@ -1,0 +1,41 @@
+id,category,detail
+t1-00123,notation,
+t1-00019,wrong_ops,missing: call_module/tail/Linear; call/tanh x4; call_module/proj/Linear; call_module/neck/Linear; call_module/stem/Linear; call_module/head/Linear | extra: call_module/head/Head
+t1-00343,notation,
+t1-00053,spelling,
+t1-00376,wrong_ops,missing: call_module/head/Conv2d; call_module/gate/BatchNorm2d; call/tanh x3; call_module/tail/Conv2d; call_module/proj/Conv2d; call_module/neck/BatchNorm2d | extra: -
+t1-00057,wrong_ops,missing: placeholder/x; call_module/layer1/Linear; call/relu x4; call_module/layer2/Linear; call_module/layer3/Linear; call_module/layer4/Linear | extra: placeholder/example_input; call_module/blocks.0/Linear; call_module/blocks.1/Linear; call_module/blocks.2/Linear; call_module/blocks.3/Linear; call_module/blocks.4/Linear
+t1-00261,wrong_ops,missing: placeholder/x; call_module/decode/Linear; call/silu x4; call_module/neck/Linear; call_module/tail/Linear; call_module/proj/Linear | extra: placeholder/example_input; call_module/head/Head
+t1-00008,wrong_ops,missing: call_module/f1/Linear; call/tanh x3; call_module/f2/Linear; call_module/f3/Linear; call_module/f4/Linear | extra: call_module/fc/Linear x4; call/tanh(arg0) x3
+t1-00061,unparseable,"line 133: cannot parse '130 call_function add [1,1'"
+t1-00107,wrong_ops,missing: call_module/c1/Conv2d; call_module/b1/BatchNorm2d; call_module/c2/Conv2d; call_module/c3/Conv2d; call_module/b2/BatchNorm2d; call_module/p1/AdaptiveAvgPool2d | extra: call_module/blocks.0/Conv2d x3; call_module/blocks.0/BatchNorm2d x2; call_module/blocks.0/AdaptiveAvgPool2d; call_module/blocks.0/Flatten; call_module/blocks.0/Linear
+t2-00232,wrong_ops,missing: call_module/post/Linear; call/silu x2; call_module/shrink.0/Linear; call_module/shrink.1/Linear; call_module/shrink.2/Linear; call_module/shrink.3/Linear | extra: call_module/fc/Linear; call/fn.silu x2; call_module/shrink/Linear
+t2-00194,unparseable,line 133: cannot parse '130 call_function add [2'
+t2-00113,wrong_ops,missing: call_module/fc1/Linear; call/sigmoid x5; call_module/stack1.0/Linear; call_module/stack1.2/Linear; call_module/stack1.4/Linear; call_module/stack1.6/Linear | extra: call_module/fc/Linear x2; call/relu x4; call_module/stack1/Linear x3
+t2-00175,wrong_ops,missing: call/sigmoid x4; call_module/stack1.0/Linear; call_module/stack1.2/Linear; call_module/stack1.4/Linear | extra: call/relu x4; call_module/stack1/Linear x3
+t2-00014,unparseable,"line 123: cannot parse '120 call_function add [32,32'"
+t2-00076,unparseable,"line 133: cannot parse '130 call_function add [2,3'"
+t2-00008,unparseable,"line 133: cannot parse '130 call_function add [2,2'"
+t2-00352,wrong_ops,missing: call_module/blocks_1.0/Linear; call_module/blocks_1.1/Linear; call_module/blocks_1.2/Linear; call_module/blocks_1.3/Linear | extra: call/gelu x2; call_module/blocks_1/Linear x3
+t2-00103,unparseable,"line 5: cannot parse '2 call_function add x y [2,16]'"
+t2-00223,unparseable,"line 123: cannot parse '120 call_function add [24,24'"
+t3-00021,unparseable,"line 7: cannot parse '4 call_function cat x [1,16] arg0 [1,16] arg1 [1,16]'"
+t3-00090,wrong_ops,missing: call_module/fc1/Linear; call_module/fc3/Linear x2; call_module/fc4/Linear; call_module/fc5/Linear; call/cat; call_module/fc6/Linear | extra: call_module/fc/Linear x6; call/sigmoid
+t3-00232,wrong_ops,missing: call_module/fc_1/Linear; call/gelu; call_module/fc_3/Linear; call_module/fc_4/Linear; call_module/fc_5/Linear; call/add x2 | extra: call_module/fc/Linear x5; call/relu x4
+t3-00382,wrong_ops,missing: call_module/layer1/Linear; call_module/layer3/Linear; call/add x3; call_module/layer4/Linear; call_module/layer5/Linear; call_module/layer6/Linear | extra: call_module/fc/Linear x5
+t3-00006,unparseable,"line 12: cannot parse '9 call_function add h right [1,16]'"
+t3-00221,wrong_ops,missing: call_module/f1/Linear; call_module/f2/Linear x2; call_module/f3/Linear; call_module/f4/Linear; call_module/f5/Linear; call/add x2 | extra: call_module/fc/Linear x6; call/gelu x3
+t3-00059,wrong_ops,missing: call/add x2; call_module/fc_5/Linear | extra: call/tanh x3
+t3-00157,wrong_ops,missing: call_module/f1/Linear; call_module/f2/Linear x2; call_module/f3/Linear; call_module/f4/Linear; call_module/f5/Linear; call/add x2 | extra: call_module/fc/Linear x5
+t3-00096,unparseable,line 123: cannot parse '120 call_function add [24'
+t3-00202,unparseable,line 66: cannot parse '63'
+t4-00158,wrong_ops,missing: call/getitem x2; call/add x2 | extra: call_module/layer7/Linear
+t4-00173,wrong_ops,missing: call/cat | extra: -
+t4-00395,wrong_ops,missing: call/cat | extra: -
+t4-00120,wrong_ops,missing: call_module/c1/Conv2d; call/tanh x3; call_module/d1/MaxPool2d; call_module/c2/Conv2d; call_module/u1/Upsample; call_module/c3/Conv2d | extra: call_module/fc/Head
+t4-00149,unparseable,"line 11: cannot parse '8 call_function cat h c u b [1,48]'"
+t4-00138,unparseable,"line 131: cannot parse '128 call_function relu [1,16'"
+t4-00340,unparseable,"line 123: cannot parse '120 call_function add [1,'"
+t4-00258,unparseable,line 106: cannot parse '103 call'
+t4-00281,wrong_ops,missing: call/relu; call/cat | extra: -
+t4-00083,wrong_ops,missing: call/getitem x2 | extra: call/add

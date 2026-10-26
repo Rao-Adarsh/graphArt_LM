@@ -1,0 +1,41 @@
+id,category,detail
+t1-00123,notation,
+t1-00019,wrong_ops,missing: call_module/proj/Linear | extra: call_module/body/Linear; call/tanh x5
+t1-00343,notation,
+t1-00053,wrong_ops,missing: placeholder/x; call_module/flat1/Flatten | extra: placeholder/example_input; call/flatten
+t1-00376,unparseable,"line 64: cannot parse '61 call_module proj Conv2d(in=48,out=2'"
+t1-00057,wrong_ops,missing: placeholder/x; call_module/layer1/Linear; call/relu x4; call_module/layer2/Linear; call_module/layer3/Linear; call_module/layer4/Linear | extra: placeholder/example_input; call_module/fc/Branchy
+t1-00261,wrong_ops,missing: placeholder/x; call_module/decode/Linear; call/silu x4; call_module/neck/Linear; call_module/tail/Linear; call_module/proj/Linear | extra: placeholder/example_input; call_module/head/Head
+t1-00008,spelling,
+t1-00061,spelling,
+t1-00107,wrong_ops,missing: call_module/c1/Conv2d; call_module/b1/BatchNorm2d; call_module/c2/Conv2d; call_module/c3/Conv2d; call_module/b2/BatchNorm2d; call_module/p1/AdaptiveAvgPool2d | extra: call_module/blocks.0/Conv2d x3; call_module/blocks.0/BatchNorm2d x2; call_module/blocks.0/AdaptiveAvgPool2d; call_module/blocks.0/Flatten; call_module/blocks.0/Linear
+t2-00232,wrong_ops,missing: call/silu x2; call_module/shrink.0/Linear; call_module/shrink.1/Linear; call_module/shrink.2/Linear; call_module/shrink.3/Linear | extra: call_module/shrink/Linear x3
+t2-00194,unparseable,"line 5: cannot parse '2 call_function add x [2,16] y [2,16] [2,16]'"
+t2-00113,wrong_ops,missing: call_module/fc1/Linear; call/sigmoid x3; call_module/stack1.0/Linear; call_module/stack1.2/Linear; call_module/stack1.4/Linear; call_module/stack1.6/Linear | extra: call_module/stack/Sequential x3; call_module/fc/Linear x3
+t2-00175,wrong_ops,missing: call/sigmoid; call_module/stack1.0/Linear; call_module/stack1.2/Linear; call_module/stack1.4/Linear; call_module/fc2/Linear | extra: call_module/stack1/Sequential; call_module/linear/Linear x3
+t2-00014,unparseable,"line 6: cannot parse '3 call_module block1 Sequential([Linear(in=32,out=32,bias=True),Tanh()],...) [1,32]'"
+t2-00076,wrong_ops,"missing: call/tanh x2; call_module/stack1.0/Linear; call_module/stack1.2/Linear | extra: call_module/stack1/Sequential; call_module/stack1.Linear(in=32,out=32,bias=True) x2; call_module/stack1.Tanh() x2"
+t2-00008,wrong_ops,missing: call/sigmoid; call_module/stack1.0/Linear; call_module/stack1.2/Linear; call_module/stack1.4/Linear | extra: call_module/stack1/Sequential; call_module/linear/Linear x2
+t2-00352,wrong_ops,missing: call/gelu x2; call_module/blocks_1.0/Linear; call_module/blocks_1.1/Linear; call_module/blocks_1.2/Linear; call_module/blocks_1.3/Linear | extra: call_module/blocks_1[0]/Linear; call_module/blocks_1[1]/Linear; call_module/blocks_1[2]/Linear; call_module/blocks_1[3]/Linear
+t2-00103,unparseable,"line 5: cannot parse '2 call_function add x [2,16] y [2,16] [2,16]'"
+t2-00223,unparseable,"line 6: cannot parse '3 call_module b1 Sequential Linear(in=24,out=24),Tanh() [1,24]'"
+t3-00021,unparseable,"line 7: cannot parse '4 call_function cat x [1,16] x [1,16]'"
+t3-00090,wrong_ops,missing: call_module/fc3/Linear; call/cat | extra: call/sigmoid; call_module/fc2/Linear
+t3-00232,wrong_ops,missing: call/add x2 | extra: call_module/extra_head/False; call_module/fc_2/Linear
+t3-00382,wrong_ops,missing: call_module/layer1/Linear; call_module/layer3/Linear; call/add x3; call_module/layer4/Linear; call_module/layer5/Linear; call_module/layer6/Linear | extra: call_module/fc/Linear x5
+t3-00006,unparseable,"line 12: cannot parse '9 call_function add h right [1,16]'"
+t3-00221,unparseable,"line 13: cannot parse '10 call_function add right c [1,16]'"
+t3-00059,wrong_ops,missing: call/add x2; call_module/fc_5/Linear | extra: call/tanh x3
+t3-00157,wrong_ops,missing: call/silu x2; call_module/f2/Linear; call/add x2 | extra: -
+t3-00096,wrong_ops,missing: call/tanh; call/add x3 | extra: -
+t3-00202,wrong_ops,missing: call/cat; call/add | extra: -
+t4-00158,wrong_ops,missing: call/getitem x2; call/add x2; output/output | extra: call_module/layer7/Add
+t4-00173,wrong_ops,missing: call/cat | extra: -
+t4-00395,wrong_ops,missing: call/cat | extra: -
+t4-00120,wrong_ops,missing: call/tanh x3; call/cat | extra: -
+t4-00149,wrong_ops,missing: call/silu x2; call/cat | extra: -
+t4-00138,wrong_ops,missing: call/add x2 | extra: -
+t4-00340,wrong_ops,missing: call/sigmoid; call/cat | extra: -
+t4-00258,wrong_ops,missing: call/getitem x2; call/add x2 | extra: call_module/add/Add x2
+t4-00281,wrong_ops,missing: placeholder/x; call/cat | extra: placeholder/example_input
+t4-00083,unparseable,"line 10: cannot parse ""7 call_module n1.get_attr 'weight' [1,16]"""

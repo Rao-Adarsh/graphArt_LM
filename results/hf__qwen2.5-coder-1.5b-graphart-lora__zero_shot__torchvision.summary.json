@@ -1,0 +1,62 @@
+{
+  "results": "hf__qwen2.5-coder-1.5b-graphart-lora__zero_shot__torchvision.jsonl",
+  "mode": "full",
+  "overall": {
+    "parsed": 0.857,
+    "valid": 0.476,
+    "exact": 0.0,
+    "exact_topo": 0.0,
+    "node_f1": 0.357,
+    "edge_f1": 0.169,
+    "n": 21
+  },
+  "by_tier": {
+    "tier 5": {
+      "parsed": 0.889,
+      "valid": 0.5,
+      "exact": 0.0,
+      "exact_topo": 0.0,
+      "node_f1": 0.365,
+      "edge_f1": 0.153,
+      "n": 18
+    },
+    "tier 6": {
+      "parsed": 0.667,
+      "valid": 0.333,
+      "exact": 0.0,
+      "exact_topo": 0.0,
+      "node_f1": 0.313,
+      "edge_f1": 0.267,
+      "n": 3
+    }
+  },
+  "by_size": {
+    "9-15": {
+      "parsed": 0.889,
+      "valid": 0.556,
+      "exact": 0.0,
+      "exact_topo": 0.0,
+      "node_f1": 0.507,
+      "edge_f1": 0.242,
+      "n": 9
+    },
+    "16-25": {
+      "parsed": 0.857,
+      "valid": 0.286,
+      "exact": 0.0,
+      "exact_topo": 0.0,
+      "node_f1": 0.325,
+      "edge_f1": 0.185,
+      "n": 7
+    },
+    "26+": {
+      "parsed": 0.8,
+      "valid": 0.6,
+      "exact": 0.0,
+      "exact_topo": 0.0,
+      "node_f1": 0.132,
+      "edge_f1": 0.016,
+      "n": 5
+    }
+  }
+}

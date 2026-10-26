@@ -24,7 +24,7 @@ OUTPUT_SLACK = 1.8           # replies run longer than the bare target text
 
 def rates_for(backend: str, model: str) -> tuple[float, float] | None:
     """($/1M input, $/1M output), or None when we cannot find out."""
-    if backend in ("mock", "ollama"):
+    if backend in ("mock", "ollama", "hf"):          # all run on hardware we already have
         return (0.0, 0.0)
     if backend == "anthropic":
         return ANTHROPIC_RATES.get(model)

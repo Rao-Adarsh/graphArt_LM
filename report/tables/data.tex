@@ -1,0 +1,16 @@
+\begin{table}[!h]
+\centering
+\small
+\begin{tabular}{lcccccc}
+\hline
+Tier & programs & train & val & test & nodes min / mean / max & merges / graph \\
+\hline
+1 flat & 400 & 320 & 40 & 40 & 7 / 10.1 / 14 & 0.00 \\
+2 loops & 400 & 320 & 40 & 40 & 8 / 10.4 / 13 & 0.00 \\
+3 branches & 400 & 320 & 40 & 40 & 8 / 12.0 / 16 & 2.02 \\
+4 blocks & 400 & 320 & 40 & 40 & 12 / 15.1 / 25 & 1.88 \\
+all & 1600 & 1280 & 160 & 160 &  &  \\
+\hline
+\end{tabular}
+\caption{The synthetic data set: four tiers by how much the code hides the graph. A merge is a node with more than one incoming value (residuals, concatenations).}\label{tab:data}
+\end{table}

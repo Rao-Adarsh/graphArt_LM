@@ -127,14 +127,19 @@ class GranularTracer(torch.fx.Tracer):
     residual merges to 17 nodes with none, because the skip connection lives
     inside the block. So depth coarsening is NOT a way to keep topology while
     reducing size; for that, contract chains after tracing instead.
+
+    `leaf_paths` names specific submodules to keep whole. The error classifier
+    uses it to ask whether a model that drew a block as one box got the graph
+    right at that coarser level.
     """
 
-    def __init__(self, leaf_depth: int | None = None):
+    def __init__(self, leaf_depth: int | None = None, leaf_paths: frozenset = frozenset()):
         super().__init__()
         self.leaf_depth = leaf_depth
+        self.leaf_paths = leaf_paths
 
     def is_leaf_module(self, m: torch.nn.Module, qualname: str) -> bool:
-        if super().is_leaf_module(m, qualname):
+        if super().is_leaf_module(m, qualname) or qualname in self.leaf_paths:
             return True
         if self.leaf_depth is None:
             return False
@@ -179,10 +184,10 @@ def _input_slots(node: torch.fx.Node, order: dict) -> dict[int, list[int]]:
 
 
 def graph_from_module(model: torch.nn.Module, *, example_input: torch.Tensor | None = None,
-                      leaf_depth: int | None = None) -> dict:
+                      leaf_depth: int | None = None, leaf_paths: frozenset = frozenset()) -> dict:
     """Trace `model` and return the forward pass in our graph schema."""
     model = model.eval()
-    graph = GranularTracer(leaf_depth).trace(model)
+    graph = GranularTracer(leaf_depth, leaf_paths).trace(model)
     modules = dict(model.named_modules())
 
     # Shapes are a bonus, not a requirement. ShapeProp itself succeeded on all
@@ -230,7 +235,8 @@ def graph_from_module(model: torch.nn.Module, *, example_input: torch.Tensor | N
 
 def graph_from_code(code: str, var: str = "model",
                     example_input: torch.Tensor | None = None,
-                    leaf_depth: int | None = None) -> tuple[dict, torch.nn.Module]:
+                    leaf_depth: int | None = None,
+                    leaf_paths: frozenset = frozenset()) -> tuple[dict, torch.nn.Module]:
     """Execute generated source and trace the nn.Module it defines in `var`.
 
     If the source also binds `example_input`, that is used for shape
@@ -257,4 +263,4 @@ def graph_from_code(code: str, var: str = "model",
         if isinstance(candidate, torch.Tensor):
             example_input = candidate
     return graph_from_module(model, example_input=example_input,
-                             leaf_depth=leaf_depth), model
+                             leaf_depth=leaf_depth, leaf_paths=leaf_paths), model

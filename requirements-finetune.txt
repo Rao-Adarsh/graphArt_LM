@@ -1,0 +1,6 @@
+# Phase 2: LoRA fine-tuning (scripts/train_lora.py) and the `hf` backend.
+# torch comes from requirements.txt. These are the versions the trainer was tested
+# with; the Kaggle notebook pins the same ones (FINETUNE_PINS in make_kaggle_notebook.py).
+transformers==5.20.2
+peft==0.21.2
+accelerate==1.15.0

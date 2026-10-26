@@ -1,0 +1,15 @@
+\begin{table}[!h]
+\centering
+\small
+\begin{tabular}{lcccccccc}
+\hline
+Model (zero-shot) & T1 & T2 & T3 & T4 & topo & exact & right graph & parsed \\
+\hline
+Qwen 1.5B & 0.20 & 0.00 & 0.00 & 0.00 & 0.05 & 0.00 & 0.07 & 0.62 \\
+Qwen 7B & 0.50 & 0.50 & 0.00 & 0.00 & 0.25 & 0.20 & 0.42 & 0.80 \\
+Qwen 14B & 1.00 & 0.80 & 0.20 & 0.40 & 0.60 & 0.17 & 0.70 & 0.47 \\
+Gemma 4 31B & 1.00 & 1.00 & 1.00 & 0.70 & 0.93 & 0.75 & 0.93 & 0.93 \\
+\hline
+\end{tabular}
+\caption{Zero-shot accuracy by model size on the 40 stratified test programs (10 per tier). Tier columns and \emph{topo} count graphs with the right topology; \emph{exact} is strict; \emph{right graph} also forgives spelling that does not change the computation.}\label{tab:scale}
+\end{table}

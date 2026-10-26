@@ -15,7 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from pipeline.score import _cell, score_reply, summarise
+from pipeline.score import _cell, load_truths, run_split, score_reply, summarise
 
 
 def _flat(value) -> str:
@@ -23,12 +23,6 @@ def _flat(value) -> str:
     return _cell(value).strip()
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def load_truths(split: str) -> dict:
-    path = ROOT / "data" / "generated" / f"{split}.jsonl"
-    return {r["id"]: r["graph"] for r in
-            (json.loads(line) for line in path.open(encoding="utf-8"))}
 
 
 def score_run(path: Path, truths: dict) -> dict | None:
@@ -54,12 +48,15 @@ def score_run(path: Path, truths: dict) -> dict | None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("results", nargs="+", help="results/*.jsonl files to compare")
-    ap.add_argument("--split", default="test", choices=["train", "val", "test"])
+    ap.add_argument("--split", default="test",
+                    help="compare only the runs made on this data set (test, torchvision, edits, ...)")
     ap.add_argument("--markdown", action="store_true", help="emit a markdown table")
     ap.add_argument("--sort", choices=["exact", "model"], default="exact")
     args = ap.parse_args()
 
     paths = [Path(p) for p in args.results if not p.endswith((".meta.json", ".summary.json"))]
+    # Runs on different sets are different questions; never mix them in one table.
+    paths = [p for p in paths if run_split(p) == args.split]
     truths = load_truths(args.split)
     runs = [r for r in (score_run(p, truths) for p in paths) if r]
     if not runs:

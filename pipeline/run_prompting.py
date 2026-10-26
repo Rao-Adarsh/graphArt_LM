@@ -76,14 +76,16 @@ def main() -> None:
     ap.add_argument("--prompt", default="zero_shot",
                     help="a name in prompts/ (zero_shot, few_shot, cot, gates_only) or a path")
     ap.add_argument("--backend", default="mock",
-                    choices=["anthropic", "openrouter", "ollama", "mock"])
+                    choices=["anthropic", "openrouter", "ollama", "hf", "mock"])
     ap.add_argument("--model", default=None, help="override the backend's default model")
     ap.add_argument("--effort", default="high",
                     choices=["low", "medium", "high", "xhigh", "max"],
                     help="hosted models only; part of the experimental condition")
     ap.add_argument("--max-tokens", type=int, default=None,
                     help="override the backend's own default output cap")
-    ap.add_argument("--split", default="test", choices=["train", "val", "test"])
+    ap.add_argument("--split", default="test",
+                    help="train, val, test, or any evaluation set in data/generated/<name>.jsonl "
+                         "(torchvision, edits, ...)")
     ap.add_argument("--tier", type=int, action="append", help="restrict to a tier (repeatable)")
     ap.add_argument("--stratify", type=int, metavar="N",
                     help="N samples per tier -- the same N for every model, so runs compare")
@@ -133,7 +135,9 @@ def main() -> None:
     except BackendError as exc:
         raise SystemExit(f"\n  {exc}\n")
     slug = (backend.model if backend else model_name).replace(":", "-").replace("/", "-")
-    run_id = f"{args.backend}__{slug}__{prompt_name}"
+    # The test split keeps the original run names; any other set gets its own suffix,
+    # so its replies and results never mix with the test split's.
+    run_id = f"{args.backend}__{slug}__{prompt_name}" + ("" if args.split == "test" else f"__{args.split}")
     cache_dir = RESULTS / "raw" / run_id
     cache_dir.mkdir(parents=True, exist_ok=True)
 

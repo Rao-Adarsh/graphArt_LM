@@ -1,0 +1,10 @@
+{
+  "backend": "hf",
+  "model": "qwen2.5-coder-1.5b-graphart-lora",
+  "prompt": "zero_shot",
+  "split": "rq6",
+  "effort": "high",
+  "n": 84,
+  "cached": 0,
+  "failed": 0
+}

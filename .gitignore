@@ -4,3 +4,21 @@ __pycache__/
 data/generated/
 .ipynb_checkpoints/
 results/raw/
+
+# LaTeX build files (report/)
+report/*.aux
+report/*.bbl
+report/*.blg
+report/*.log
+report/*.out
+report/*.fls
+report/*.fdb_latexmk
+report/*.synctex.gz
+report/build.log
+report/bib.log
+
+# Raw Kaggle downloads (adapter weights, run dumps); scored replies are copied into results/
+kaggle_results/
+
+# Office lock files
+~$*

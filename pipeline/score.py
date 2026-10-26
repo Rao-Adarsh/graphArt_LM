@@ -104,6 +104,19 @@ def score_reply(reply: str, truth: dict, *, mode: str = "full") -> dict:
     return {**compare(predicted, truth), "parsed": True, "parse_error": None}
 
 
+def run_split(results_path: Path) -> str:
+    """The data set a run used, from the .meta.json the runner writes beside it."""
+    meta = results_path.with_suffix(".meta.json")
+    return json.loads(meta.read_text(encoding="utf-8")).get("split", "test") if meta.exists() else "test"
+
+
+def load_truths(split: str) -> dict:
+    path = ROOT / "data" / "generated" / f"{split}.jsonl"
+    if not path.exists():
+        raise SystemExit(f"{path} not found -- build that set first")
+    return {r["id"]: r["graph"] for r in (json.loads(line) for line in path.open(encoding="utf-8"))}
+
+
 def _mean(values: list[float]) -> float:
     return sum(values) / len(values) if values else 0.0
 
@@ -138,18 +151,21 @@ def table(title: str, groups: dict[str, list[dict]]) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("results", help="a results/*.jsonl file written by run_prompting.py")
-    ap.add_argument("--split", default="test", choices=["train", "val", "test"])
+    ap.add_argument("--split", default=None,
+                    help="which data set the run used; read from the run's .meta.json when omitted")
     ap.add_argument("--mode", choices=["full", "nodes", "edges"],
                     help="what the reply contains; inferred from the run's prompt name")
     ap.add_argument("--slides", action="store_true",
                     help="also print the per-tier rows as a RESULTS literal for make_slides.py")
     args = ap.parse_args()
+    # Parse errors quote model output, which can hold characters a Windows console
+    # cannot print; a crash there would lose the summary that is written after.
+    sys.stdout.reconfigure(errors="replace")
 
     results_path = Path(args.results).resolve()
     records = [json.loads(line) for line in results_path.open(encoding="utf-8")]
-    truths = {r["id"]: r["graph"] for r in
-              (json.loads(line) for line in
-               (ROOT / "data" / "generated" / f"{args.split}.jsonl").open(encoding="utf-8"))}
+    args.split = args.split or run_split(results_path)
+    truths = load_truths(args.split)
 
     mode = args.mode or ("nodes" if "nodes_only" in results_path.stem
                          else "edges" if "edges_only" in results_path.stem else "full")
