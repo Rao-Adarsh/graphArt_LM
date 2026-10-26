@@ -205,8 +205,6 @@ def compare_figure(truth: dict, pred: dict, title: str = "", path: str | None = 
     draw_graph(pred, ax_p, bad_nodes=bad_p, bad_edges=bad_pe, bad_style=SPURIOUS,
                title=f"model output   (orange: {len(bad_p)} node(s), "
                      f"{len(bad_pe)} edge(s) invented)")
-    for ax in (ax_t, ax_p):
-        ax.set_title(ax.get_title(), loc="left", fontsize=11)
     if title:
         fig.suptitle(title, fontsize=13, weight="bold")
     fig.tight_layout()

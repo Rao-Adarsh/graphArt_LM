@@ -129,9 +129,14 @@
 %  - data: own generator, 4 tiers of hidden structure, 1600 programs, 1280/160/160
 %  - prompting: 4 models (Qwen2.5-Coder 1.5B/7B/14B, Gemma 4 31B), 6 prompts
 %    -> zero-shot topology: 0.05 -> 0.25 -> 0.60 -> 0.93 with scale
-%  - fine-tuning: LoRA on 1.5B, 97 min on one free T4 -> 40/40 exact (beats prompted 31B: 30/40)
-%  - verified: no leak; 20/20 on fresh programs whose graphs appear in no split
-%  - closing questions: real code (torchvision), controlled edits, held-out construct
+%  - fine-tuning: LoRA on 1.5B, 97 min on one free T4 -> 40/40 exact on OUR generator's code
+%    (prompted 31B: 30/40 exact, 37/40 right graph); no leak; 20/20 on fresh programs
+%  - but on real torchvision code 0/21 (draws 16/18 as a straight chain; prompted 14B 4/21);
+%    both models answer changed wiring with the unedited graph (64% / 68%); the tuned model deletes
+%    a branch under a True flag (0/4) because every training flag was False
+%  - take-away: a perfect in-distribution score + clean leak audit did not show understanding;
+%    behavioural probes with exact ground truth did
+%  - deliverable: a local test interface (paste/upload/generate code -> both graphs + metrics)
 \writehere{Abstract: the task, the approach, and the headline numbers.}
 \end{abstract}
 
@@ -149,7 +154,9 @@
 %      RQ3 prompting vs fine-tuning, RQ4 real code, RQ5 dataflow vs pattern-matching,
 %      RQ6 unseen construct
 %  - contributions (list them): exact-graded benchmark with tiers; CoS prompt; read/wire
-%    decomposition; LoRA result; leak audit + fresh-program check; edit-based probe of understanding
+%    decomposition; LoRA result; leak audit + fresh-program check; edit-based probe of understanding;
+%    rule-based error classifier + connectivity metric; the finding that the tuned model learned the
+%    generator's shortcuts; a test interface
 %  - end with the structure of the report (template asks for it; see the \ref labels below)
 \writehere{Introduction: motivation, why it is hard, why LLMs, the research questions, and the
 report's structure (Sections \ref{sec:workflow}--\ref{sec:conclusion}).}
@@ -165,6 +172,7 @@ report's structure (Sections \ref{sec:workflow}--\ref{sec:conclusion}).}
 %  - 17-22 Oct: Phase 1 prompting (OpenRouter free tier, local Ollama, Kaggle T4s)
 %  - 23-25 Oct: Phase 2 LoRA fine-tuning on Kaggle (two failed runs fixed first)
 %  - 25-26 Oct: leak audit, fresh-program check, closing experiments RQ4-RQ6
+%  - 26 Oct: error classifier + right-graph level + connectivity metric; test interface
 \begin{figure}[!h]
 	\centering
 	\includegraphics[width=\textwidth]{workflow}
@@ -235,6 +243,30 @@ two approaches: prompting (including our chain-of-simulation prompt) and LoRA fi
 	\mathcal{L}(\theta) &= -\frac{1}{|\mathcal{A}|} \sum_{t \in \mathcal{A}} \log p_\theta\left(y_t \mid y_{<t}, x\right) \label{eq:loss}
 \end{align}
 
+\subsection{Test interface}
+% FACT SHEET -- interface (deliverable: "proper methodology for preparing the interface")
+%  - what: local web app, interface/app.py (Gradio 6.30); run: .venv/Scripts/python interface/app.py,
+%    open http://127.0.0.1:7860; deps in requirements-interface.txt
+%  - inputs: paste code, upload a .py file, pick one of 254 examples (40 test, 21 torchvision, 193
+%    edits), or GENERATE a fresh program with the project's generator (tier + seed)
+%  - pipeline per request: (1) reference = torch.fx trace of the code (graph_from_code; for examples,
+%    the stored truth); (2) prediction = the fine-tuned 1.5B (HFBackend + LoRA, zero-shot prompt,
+%    greedy) live on CPU (~2 min; 124 s measured), or the answer saved during the experiments for
+%    examples (instant); (3) parse with the same parameter-stripping retry as `topo`; (4) score with
+%    the project's own compare() + classify(); (5) draw with compare_figure (red = missed,
+%    orange = invented)
+%  - outputs: side-by-side graphs, 8 metrics (exact, topo, right graph, node F1, edge F1, reach F1,
+%    shape accuracy, validity), the error category, validator messages, raw graph text
+%  - generated programs are checked against all 1,280 training graphs (Weisfeiler-Lehman hash under
+%    the exact-match labels) and the app says whether the graph is new -- so a perfect answer on a
+%    generated program can be told apart from recall
+%  - design choices: same code path as the experiments (no separate demo logic) so the interface shows
+%    exactly what was measured; saved answers make the demo instant; a larger "pensive" model was
+%    dropped: Qwen 14B needs ~10 GB free RAM (laptop: 16 GB total), free Gemma endpoint rate-limited
+%  - safety: tracing executes the pasted code's constructor -> bound to 127.0.0.1 only
+\writehere{How the interface was built: inputs, the processing pipeline, outputs, and the design
+choices (Figure for the interface: a screenshot).}
+
 \section{Data set Details} \label{sec:data}
 % FACT SHEET -- data (README "Dataset" has the tier table)
 %  - fully synthetic, text (Python source -> graph text); generator graphart/generate.py; builder
@@ -260,6 +292,18 @@ two approaches: prompting (including our chain-of-simulation prompt) and LoRA fi
 %    DISCLOSE: the rule missed helper FUNCTIONS (conv3x3/conv1x1, all 3 ResNet samples) and the input
 %    name (MNASNet uses `input`); split kept as fixed
 %  - rq6 probe 84 = control 22, dead_branch 18, dead_flag 40 (dead `if` added), branch_on 4 (flag True)
+%  - EXTRACTION, step by step (data procurement):
+%    synthetic: scripts/build_dataset.py --per-tier 400 (seed 0): generate -> exec -> torch.fx trace +
+%      ShapeProp -> validate -> dedup -> stratified 80/10/10 split per tier -> data/generated/*.jsonl
+%    torchvision (scripts/build_torchvision_set.py): for each block, pull torchvision's OWN source with
+%      `inspect` (the class + the helpers it uses + imports), append one construction line and an
+%      example input, trace it, and check the graph is isomorphic to tracing the genuine torchvision
+%      object -- so the assembled code is known to define exactly torchvision's graph (21/21 pass)
+%    edits (scripts/build_edit_set.py): programmatic edits of the 40 test programs; each re-traced, and
+%      a meaningful edit is kept only if its graph differs from the original's (0 violations checked)
+%    rq6 (scripts/build_rq6_probe.py): test programs grouped by construct + the dead_flag/branch_on edits
+%    source: github.com/pytorch/vision (torchvision 0.x source, cite web_torchvision); all data is
+%      text (Python source + graph text); data/generated/ is in the repository
 \input{tables/data}
 \writehere{The data: what it is, how it is generated, the tiers (Table \ref{tab:data}), splits,
 preprocessing and the evaluation sets.}
@@ -366,8 +410,31 @@ and what was changed.}
 \input{tables/closing_rq5}
 \input{tables/closing_rq6}
 
-\writehere{For each research question: what the figure/table shows, and what you infer from it.
-Include qualitative examples (a reply beside its reference: \texttt{docs/figures/comparison.png}).}
+% Qualitative results (scripts/make_report_figures.py, fig_qualitative): red = in the reference,
+% missed; orange = invented by the model.
+%  - fig:qual_14b: 14B zero-shot writes in a dead branch (fc2 under `if self.wide:` with wide=False),
+%    renames a reused layer (fc3 -> invented fc3_1), and spells sigmoid as a function
+%  - fig:qual_chain: the tuned 1.5B on SqueezeNet's Fire block: both branches chained, cat dropped
+%  - fig:qual_reroute: the tuned 1.5B on an edit fc1(h) -> fc1(x): it keeps the old flat1 -> fc1
+%    edge and misses x -> fc1 -- the "gave the original graph" signature
+\begin{figure}[!h]
+	\centering
+	\includegraphics[width=\textwidth]{qual_14b_dead_branch}
+	\caption{Qualitative: Qwen 14B zero-shot on a tier-3 test program. Red: in the reference, missed; orange: invented.}\label{fig:qual_14b}
+\end{figure}
+\begin{figure}[!h]
+	\centering
+	\includegraphics[width=\textwidth]{qual_lora_chain}
+	\caption{Qualitative: the fine-tuned 1.5B on torchvision's SqueezeNet Fire block draws a chain.}\label{fig:qual_chain}
+\end{figure}
+\begin{figure}[!h]
+	\centering
+	\includegraphics[width=0.85\textwidth]{qual_lora_reroute}
+	\caption{Qualitative: the fine-tuned 1.5B on a rerouted input answers with the unedited graph.}\label{fig:qual_reroute}
+\end{figure}
+
+\writehere{For each research question: what the figure/table shows, and what you infer from it,
+including the qualitative examples (Figures \ref{fig:qual_14b}--\ref{fig:qual_reroute}).}
 
 \section{Plan for Novelty Assessment} \label{sec:Plan for Novelty Assessment}
 % FACT SHEET -- novelty plan (assessment 23/25 Nov)
@@ -380,7 +447,8 @@ Include qualitative examples (a reply beside its reference: \texttt{docs/figures
 %    signatures go; edit-augmented training (pairs that differ only in wiring)
 %  - next: Gemma 31B on the edits; all 160 test; length generalisation
 %    to whole networks (answers up to ~3000 tokens vs 877 in training); curriculum or chunked output
-%    for big graphs; fine-tune with edit-augmented data; interface: paste code -> predicted vs
+%    for big graphs; fine-tune with edit-augmented data; (interface: DONE, see the Test interface
+%    subsection) -- earlier plan line kept for the record: paste code -> predicted vs
 %    reference graph with differences highlighted
 \writehere{The plan for the novelty assessment.}
 

@@ -108,8 +108,9 @@ nanoGPT-scale, to ask whether general pretraining is necessary at all.
 Real architectures from `torchvision`, controlled edits, and a held-out code construct;
 see [Closing experiments](#closing-experiments-rq4rq6-fine-tuned-15b-vs-prompted-14b).
 
-### Phase 5: Interface
-Paste code, see the predicted graph beside the reference with differences highlighted.
+### Phase 5: Interface ✅ done
+Paste code, see the predicted graph beside the reference with differences highlighted; see
+[Interface](#interface).
 
 ### Research questions
 1. How does accuracy fall as the code hides more of the structure (tier 1 → 4)? And as
@@ -181,6 +182,7 @@ That measurement is what sets the 80-node cap in the dataset builder.
 | **topo** | `exact`, but comparing nodes without their module parameters and without the function-vs-method distinction (`x.tanh()` vs `torch.tanh(x)`). A model that puts the right operation in the right place but spells it in another notation has still recovered the topology |
 | **right graph** | `topo`, but also forgiving an activation written as a function where the code has a layer (or the reverse), `F.max_pool2d` vs `max_pool2d`, and `a + b` vs `b + a`. Still requires every operation and every connection. Computed by `scripts/classify_errors.py`, added after the closing runs and applied to every run |
 | **node F1 / edge F1** | Partial credit on the node and edge multisets |
+| **reach F1** | Connectivity preservation: overlap of the (ancestor, descendant) pairs — every "B depends on A" relation through any path — compared on topology labels. Rerouting one edge keeps most of them; flattening a branching network into a chain invents many |
 | **shape_acc** | Of the nodes whose label was right, how many also had the right shape |
 
 Shapes are scored **separately on purpose**. Shape inference is a different skill from
@@ -467,6 +469,72 @@ free Colab GPU for mid-size models.
 
 ---
 
+### Reproducing everything
+
+Every number in the report and deck comes from `results/*.jsonl` (committed) through the
+scripts below, so re-scoring never needs a GPU. The data in `data/generated/` is committed
+too; the first three commands rebuild it from scratch.
+
+| step | command | needs |
+|---|---|---|
+| synthetic data (seed 0) | `scripts/build_dataset.py --per-tier 400` | CPU |
+| real-code set (RQ4) | `scripts/build_torchvision_set.py` | `torchvision` |
+| edit set (RQ5), probe set (RQ6) | `scripts/build_edit_set.py`, then `scripts/build_rq6_probe.py` | CPU |
+| prompting runs (Phase 1) | `python -m pipeline.run_prompting --prompt <p> --backend <b> --model <m> --stratify 10` | see backends; Kaggle notebook: `scripts/make_kaggle_notebook.py` |
+| fine-tuning (Phase 2) | `scripts/make_kaggle_notebook.py --finetune` → run `notebooks/kaggle_finetune.ipynb` on a Kaggle T4; or locally `scripts/train_lora.py --out models/<name>` | GPU (~100 min on a T4) |
+| closing runs (RQ4–RQ6) | `scripts/make_kaggle_notebook.py --closing-hf` and `--closing-ollama` → run on Kaggle; RQ6's held-out adapter is `train_lora.py --exclude-construct dead_branch` | GPU, ≤2.5 h each |
+| score one run | `python -m pipeline.score results/<run>.jsonl` | CPU |
+| compare runs | `python -m pipeline.compare results/*.jsonl --markdown` | CPU |
+| classify every miss | `scripts/classify_errors.py results/<run>.jsonl [--solved results/<test run>.jsonl --by edit]` | CPU |
+| edits, RQ6 analyses | `scripts/analyze_edits.py <edits run> <test run>`, `scripts/analyze_rq6.py <rq6 runs>` | CPU |
+| report figures and tables | `scripts/make_report_figures.py`, then `pdflatex` + `bibtex` in `report/` | LaTeX |
+| deck | `scripts/make_final_deck.py` (after the report figures) | python-pptx |
+
+The fine-tuned adapter (~74 MB) is not in git; it goes in `models/qwen2.5-coder-1.5b-graphart-lora/`
+(see [Interface](#interface)).
+
+## Interface
+
+`interface/app.py` is a small local web app (Gradio) for trying the method on any
+PyTorch module:
+
+- **Input:** paste code, upload a `.py` file, pick one of the 254 examples (the 40 test
+  programs, 21 torchvision samples and 193 controlled edits), or **generate** a fresh
+  program with the project's generator for a chosen tier (and seed). A generated program is
+  checked against all 1,280 training graphs, and the app says whether its graph is new
+  or one the model was trained on.
+- **Reference:** `torch.fx` traces the true graph from the code.
+- **Model:** the fine-tuned Qwen2.5-Coder 1.5B reads the code — without running it — and
+  writes its graph. On a laptop CPU this takes about 1–3 minutes. For the examples, the
+  answer saved during the experiments is shown instantly; untick the box to run live.
+- **Output:** the two graphs side by side with every mismatch coloured (red: missed;
+  orange: invented), the metrics (`exact`, `topo`, `right graph`, node F1, edge F1,
+  connectivity preserved, shape accuracy, validity), the error category from `scripts/classify_errors.py`, the
+  validator's messages, and the raw graph text.
+
+**Run it**
+```bash
+.venv/Scripts/pip install -r requirements-interface.txt
+```
+```bash
+.venv/Scripts/python interface/app.py
+```
+then open http://127.0.0.1:7860. It needs the LoRA adapter in
+`models/qwen2.5-coder-1.5b-graphart-lora/` (git-ignored, ~74 MB; produced by
+`notebooks/kaggle_finetune.ipynb`), and downloads the 1.5B base model from Hugging Face
+on first use. Pasted code must define the module and create one instance; set
+`example_input = torch.randn(...)` to get shapes.
+
+**What to expect.** The model is near-perfect on code written like its training data and
+draws most real-world code as a straight chain (see
+[Closing experiments](#closing-experiments-rq4rq6-fine-tuned-15b-vs-prompted-14b)); the
+torchvision examples show this. A larger prompted model was considered as a second,
+slower mode and dropped: Qwen 14B needs ~10 GB of free RAM, and the free Gemma 31B
+endpoint is rate-limited.
+
+**Safety.** Tracing runs the pasted code's constructor. The app listens on `127.0.0.1`
+only; paste only code you trust.
+
 ## Repository layout
 
 ```
@@ -490,10 +558,13 @@ graphArt_LM/
 │   └── compare.py     # several runs side by side
 ├── prompts/           # the six prompts above
 ├── scripts/           # build_dataset, make_kaggle_notebook, train_lora, classify_errors, analyze_edits, analyze_rq6, ...
-├── notebooks/         # generated: kaggle_ollama.ipynb (Phase 1), kaggle_finetune.ipynb (Phase 2)
+├── interface/         # app.py: the Gradio interface
+├── models/            # the LoRA adapter (git-ignored)
+├── notebooks/         # generated: kaggle_ollama.ipynb (Phase 1), kaggle_finetune.ipynb (Phase 2), kaggle_closing_*.ipynb
 ├── results/           # one .jsonl of replies per (model, prompt) run; raw/ is the git-ignored cache
 ├── docs/              # validator.md, figures/, presentation/
-└── data/generated/    # built by build_dataset.py (git-ignored; seed 0 reproduces it)
+└── data/generated/    # the data, committed (7 MB): train/val/test from build_dataset.py (seed 0),
+                       #   torchvision/edits/rq6 from the build_*_set scripts
 ```
 
 ## Next steps

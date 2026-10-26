@@ -5,9 +5,10 @@
     "parsed": 0.9,
     "valid": 0.775,
     "exact": 0.475,
-    "exact_topo": 0.675,
+    "exact_topo": 0.7,
     "node_f1": 0.843,
     "edge_f1": 0.747,
+    "reach_f1": 0.879,
     "n": 40
   },
   "by_tier": {
@@ -15,9 +16,10 @@
       "parsed": 0.9,
       "valid": 0.9,
       "exact": 0.6,
-      "exact_topo": 0.9,
+      "exact_topo": 1.0,
       "node_f1": 0.821,
       "edge_f1": 0.725,
+      "reach_f1": 0.9,
       "n": 10
     },
     "tier 2": {
@@ -27,6 +29,7 @@
       "exact_topo": 0.9,
       "node_f1": 0.969,
       "edge_f1": 0.917,
+      "reach_f1": 0.946,
       "n": 10
     },
     "tier 3": {
@@ -36,6 +39,7 @@
       "exact_topo": 0.3,
       "node_f1": 0.847,
       "edge_f1": 0.693,
+      "reach_f1": 0.881,
       "n": 10
     },
     "tier 4": {
@@ -45,6 +49,7 @@
       "exact_topo": 0.6,
       "node_f1": 0.735,
       "edge_f1": 0.652,
+      "reach_f1": 0.787,
       "n": 10
     }
   },
@@ -56,15 +61,17 @@
       "exact_topo": 1.0,
       "node_f1": 1.0,
       "edge_f1": 1.0,
+      "reach_f1": 1.0,
       "n": 1
     },
     "9-15": {
       "parsed": 0.892,
       "valid": 0.784,
       "exact": 0.486,
-      "exact_topo": 0.676,
+      "exact_topo": 0.703,
       "node_f1": 0.835,
       "edge_f1": 0.741,
+      "reach_f1": 0.869,
       "n": 37
     },
     "16-25": {
@@ -74,6 +81,7 @@
       "exact_topo": 0.5,
       "node_f1": 0.911,
       "edge_f1": 0.722,
+      "reach_f1": 0.998,
       "n": 2
     }
   }

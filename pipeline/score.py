@@ -61,6 +61,11 @@ _MODULE_PARAMS = re.compile(r"^(\s*\d+\s+call_module\s+\S+\s+[A-Za-z_]\w*)\([^)]
 _EMPTY_PARAMS = re.compile(r"^(\s*\d+\s+call_module\s+\S+\s+[A-Za-z_]\w*)\s*\[\]\s+(?=\[)", re.M)
 
 
+# A nodes-only reply has no edges, so its edge and connectivity scores are "not
+# asked for" (None), not 0 -- including when the reply fails to parse.
+_NOT_ASKED = {"nodes": {"edge_f1": None, "reach_f1": None}}
+
+
 def _topology_fallback(text: str, truth: dict, mode: str) -> bool:
     """`exact_topo` for a reply that failed to parse only because of how it
     wrote module parameters (BatchNorm2d(8) for BatchNorm2d(features=8), or
@@ -93,11 +98,11 @@ def score_reply(reply: str, truth: dict, *, mode: str = "full") -> dict:
         # be forced down here -- a reply we cannot read is not a well-formed DAG.
         result = compare(EMPTY, truth) | {"valid": False,
                                           "exact_topo": _topology_fallback(text, truth, mode)}
-        return {**result, "parsed": False, "parse_error": str(exc)}
+        return {**result, **_NOT_ASKED.get(mode, {}), "parsed": False, "parse_error": str(exc)}
     if not predicted["nodes"]:
         # Parses, but says nothing. An empty graph passes every structural check
         # vacuously, so it has to be failed explicitly rather than scored valid.
-        return {**compare(EMPTY, truth), "valid": False, "parsed": False,
+        return {**compare(EMPTY, truth), **_NOT_ASKED.get(mode, {}), "valid": False, "parsed": False,
                 "parse_error": "empty reply -- no nodes"}
     if mode == "nodes":
         return {**compare_nodes(predicted, truth), "parsed": True, "parse_error": None}
@@ -122,7 +127,7 @@ def _mean(values: list[float]) -> float:
 
 
 def summarise(scored: list[dict]) -> dict:
-    keys = ("parsed", "valid", "exact", "exact_topo", "node_f1", "edge_f1")
+    keys = ("parsed", "valid", "exact", "exact_topo", "node_f1", "edge_f1", "reach_f1")
     out = {}
     for k in keys:
         # None means "not asked for in this mode", which must not average as 0.
@@ -138,13 +143,13 @@ def _cell(value) -> str:
 def table(title: str, groups: dict[str, list[dict]]) -> str:
     header = (f"\n{title}\n"
               f"{'group':<14}{'n':>5}{'parsed':>9}{'valid':>8}{'exact':>8}{'topo':>8}"
-              f"{'node F1':>10}{'edge F1':>10}")
+              f"{'node F1':>10}{'edge F1':>10}{'reach F1':>10}")
     lines = [header, "-" * len(header.splitlines()[-1])]
     for name, rows in groups.items():
         s = summarise(rows)
         lines.append(f"{name:<14}{s['n']:>5}   {_cell(s['parsed'])}  {_cell(s['valid'])}"
                      f"  {_cell(s['exact'])}  {_cell(s['exact_topo'])}"
-                     f"    {_cell(s['node_f1'])}    {_cell(s['edge_f1'])}")
+                     f"    {_cell(s['node_f1'])}    {_cell(s['edge_f1'])}    {_cell(s['reach_f1'])}")
     return "\n".join(lines)
 
 
@@ -190,6 +195,7 @@ def main() -> None:
     print(table("by graph size", by_size))
     print(table("overall", {"all": scored}))
     print("topo = exact, ignoring module parameters and function-vs-method spelling")
+    print("reach F1 = connectivity preserved: overlap of (ancestor, descendant) pairs")
 
     unparsed = [s for s in scored if not s["parsed"]]
     if unparsed:

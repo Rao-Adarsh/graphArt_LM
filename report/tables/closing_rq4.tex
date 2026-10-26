@@ -1,12 +1,12 @@
 \begin{table}[!h]
 \centering
 \small
-\begin{tabular}{lccccccccc}
+\begin{tabular}{lcccccccccc}
 \hline
-torchvision (21) & parsed & exact & topo & right & node F1 & edge F1 & in-distr. & unseen & chain \\
+torchvision (21) & parsed & exact & topo & right & node F1 & edge F1 & reach F1 & in-distr. & unseen & chain \\
 \hline
-Qwen 14B, prompted & 14 & 1 & 1 & 4 & 0.31 & 0.20 & 4 / 5 & 0 / 16 & 2 / 14 \\
-Qwen 1.5B + LoRA & 18 & 0 & 0 & 0 & 0.36 & 0.17 & 0 / 5 & 0 / 16 & 16 / 18 \\
+Qwen 14B, prompted & 14 & 1 & 1 & 4 & 0.31 & 0.20 & 0.21 & 4 / 5 & 0 / 16 & 2 / 14 \\
+Qwen 1.5B + LoRA & 18 & 0 & 0 & 0 & 0.36 & 0.17 & 0.31 & 0 / 5 & 0 / 16 & 16 / 18 \\
 \hline
 \end{tabular}
 \caption{RQ4, real code: counts over 21 torchvision samples. \emph{In-distr.} (5 samples) have none of the constructs absent from all 1,280 training programs (own block classes, grouped convolutions, tuple kernels, un-shortened \texttt{F.} functions, \texttt{assert}); the rule was fixed before the tuned model's results were opened. \emph{Right} is the right-graph level. \emph{Chain}: readable replies with no branch at all; 4 of the 21 true graphs are chains.}\label{tab:closing_rq4}

@@ -21,6 +21,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch
 
+from graphart.render import compare_figure
 from pipeline.score import load_truths, score_reply, summarise
 from scripts.analyze_rq6 import GROUPS as RQ6_GROUPS, included_dead_layer
 from scripts.classify_errors import classify, parse
@@ -126,12 +127,14 @@ def fig_scale() -> None:
     fig.tight_layout()
     _save(fig, "scale_by_tier")
     plt.close(fig)
-    table("scale", ["Model (zero-shot)", "T1", "T2", "T3", "T4", "topo", "exact", "right graph", "parsed"],
+    table("scale", ["Model (zero-shot)", "T1", "T2", "T3", "T4", "topo", "exact", "right graph", "reach F1",
+                    "parsed"],
           [[k, *by_tier(v), summarise(v)["exact_topo"], summarise(v)["exact"], right_graph(runs[k]),
-            summarise(v)["parsed"]] for k, v in data.items()],
+            summarise(v)["reach_f1"], summarise(v)["parsed"]] for k, v in data.items()],
           "Zero-shot accuracy by model size on the 40 stratified test programs (10 per tier). "
           "Tier columns and \\emph{topo} count graphs with the right topology; \\emph{exact} is strict; "
-          "\\emph{right graph} also forgives spelling that does not change the computation.")
+          "\\emph{right graph} also forgives spelling that does not change the computation; \\emph{reach F1} "
+          "measures connectivity preservation (shared ancestor--descendant pairs).")
 
 
 def fig_prompts() -> None:
@@ -179,8 +182,8 @@ def fig_finetune() -> None:
     fig.tight_layout()
     _save(fig, "finetune_vs_prompting")
     plt.close(fig)
-    table("finetune", ["Model", "exact", "topo", "right graph", "parsed"],
-          [[k, v["exact"], v["exact_topo"], v["right"], v["parsed"]] for k, v in data.items()],
+    table("finetune", ["Model", "exact", "topo", "right graph", "reach F1", "parsed"],
+          [[k, v["exact"], v["exact_topo"], v["right"], v["reach_f1"], v["parsed"]] for k, v in data.items()],
           "Fine-tuning against prompting, same 40 test programs and the same zero-shot prompt for the "
           "two 1.5B rows. All on our generator's programs; Table~\\ref{tab:closing_rq4} has real code.")
 
@@ -285,7 +288,7 @@ def rq4() -> dict:
         uns = [c for row, c in cats if not in_distribution(row)]
         out[name] = {"parsed": len(parsed), "exact": round(summary["exact"] * len(cats)),
                      "topo": round(summary["exact_topo"] * len(cats)), "right": sum(c in RIGHT for _, c in cats),
-                     "node_f1": summary["node_f1"], "edge_f1": summary["edge_f1"],
+                     "node_f1": summary["node_f1"], "edge_f1": summary["edge_f1"], "reach_f1": summary["reach_f1"],
                      "ind": (sum(c in RIGHT for c in ind), len(ind)), "uns": (sum(c in RIGHT for c in uns), len(uns)),
                      "chain": (sum(map(is_chain, parsed)), len(parsed))}
     return out
@@ -364,8 +367,8 @@ def fig_closing() -> None:
     plt.close(fig)
 
     table("closing_rq4", ["torchvision (21)", "parsed", "exact", "topo", "right", "node F1", "edge F1",
-                          "in-distr.", "unseen", "chain"],
-          [[k, v["parsed"], v["exact"], v["topo"], v["right"], v["node_f1"], v["edge_f1"],
+                          "reach F1", "in-distr.", "unseen", "chain"],
+          [[k, v["parsed"], v["exact"], v["topo"], v["right"], v["node_f1"], v["edge_f1"], v["reach_f1"],
             _frac(v["ind"]), _frac(v["uns"]), _frac(v["chain"])] for k, v in a.items()],
           "RQ4, real code: counts over 21 torchvision samples. \\emph{In-distr.} (5 samples) have none of the "
           "constructs absent from all 1,280 training programs (own block classes, grouped convolutions, tuple "
@@ -387,10 +390,40 @@ def fig_closing() -> None:
           "flagged branches in the training data have the flag \\texttt{False}.")
 
 
+
+# --------------------------------------------------------------------------
+# qualitative: a reply beside its reference, every mismatch coloured
+# --------------------------------------------------------------------------
+QUALITATIVE = [
+    # (figure name, run, split, sample, title)
+    ("qual_14b_dead_branch", "ollama__qwen2.5-coder-14b__zero_shot", "test", "t3-00090",
+     "t3-00090: reference (left) vs Qwen 14B zero-shot (right)"),
+    ("qual_lora_chain", "hf__qwen2.5-coder-1.5b-graphart-lora__zero_shot__torchvision", "torchvision",
+     "tv-squeezenet-fire", "SqueezeNet Fire block (torchvision): reference vs fine-tuned 1.5B"),
+    ("qual_lora_reroute", "hf__qwen2.5-coder-1.5b-graphart-lora__zero_shot__edits", "edits",
+     "t1-00343~reroute", "Edit: fc1(h) -> fc1(x): reference vs fine-tuned 1.5B"),
+]
+# the deck's qualitative slide uses the same renderer, at the same names as before
+DECK_COPIES = {"qual_14b_dead_branch": "qual_t3-00090.png"}
+
+
+def fig_qualitative() -> None:
+    deck = ROOT / "report" / "deck_figures"
+    for name, run, split, sample, title in QUALITATIVE:
+        reply = next(r["reply"] for r in map(json.loads, (ROOT / "results" / f"{run}.jsonl").open(encoding="utf-8"))
+                     if r["id"] == sample)
+        pred, _ = parse(reply)
+        fig = compare_figure(load_truths(split)[sample], pred, title=title)
+        _save(fig, name)
+        if name in DECK_COPIES:
+            fig.savefig(deck / DECK_COPIES[name], dpi=200, bbox_inches="tight")
+        plt.close(fig)
+
+
 def main() -> None:
     FIG.mkdir(parents=True, exist_ok=True)
     TAB.mkdir(parents=True, exist_ok=True)
-    for make in (fig_workflow, fig_scale, fig_prompts, fig_finetune, fig_decomposition, table_data, fig_closing):
+    for make in (fig_workflow, fig_scale, fig_prompts, fig_finetune, fig_decomposition, table_data, fig_closing, fig_qualitative):
         make()
         print("made", make.__name__)
 

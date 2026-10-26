@@ -8,6 +8,7 @@
     "exact_topo": 0.925,
     "node_f1": 0.892,
     "edge_f1": 0.849,
+    "reach_f1": 0.925,
     "n": 40
   },
   "by_tier": {
@@ -18,6 +19,7 @@
       "exact_topo": 1.0,
       "node_f1": 0.921,
       "edge_f1": 0.825,
+      "reach_f1": 1.0,
       "n": 10
     },
     "tier 2": {
@@ -27,6 +29,7 @@
       "exact_topo": 1.0,
       "node_f1": 0.992,
       "edge_f1": 0.983,
+      "reach_f1": 1.0,
       "n": 10
     },
     "tier 3": {
@@ -36,6 +39,7 @@
       "exact_topo": 1.0,
       "node_f1": 0.954,
       "edge_f1": 0.887,
+      "reach_f1": 1.0,
       "n": 10
     },
     "tier 4": {
@@ -45,6 +49,7 @@
       "exact_topo": 0.7,
       "node_f1": 0.7,
       "edge_f1": 0.7,
+      "reach_f1": 0.7,
       "n": 10
     }
   },
@@ -56,6 +61,7 @@
       "exact_topo": 1.0,
       "node_f1": 1.0,
       "edge_f1": 1.0,
+      "reach_f1": 1.0,
       "n": 1
     },
     "9-15": {
@@ -65,6 +71,7 @@
       "exact_topo": 0.919,
       "node_f1": 0.887,
       "edge_f1": 0.846,
+      "reach_f1": 0.919,
       "n": 37
     },
     "16-25": {
@@ -74,6 +81,7 @@
       "exact_topo": 1.0,
       "node_f1": 0.938,
       "edge_f1": 0.833,
+      "reach_f1": 1.0,
       "n": 2
     }
   }

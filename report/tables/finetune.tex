@@ -1,14 +1,14 @@
 \begin{table}[!h]
 \centering
 \small
-\begin{tabular}{lcccc}
+\begin{tabular}{lccccc}
 \hline
-Model & exact & topo & right graph & parsed \\
+Model & exact & topo & right graph & reach F1 & parsed \\
 \hline
-Qwen 1.5B, untuned & 0.00 & 0.05 & 0.10 & 0.75 \\
-Qwen 14B, few-shot & 0.47 & 0.70 & 0.78 & 0.90 \\
-Gemma 4 31B, zero-shot & 0.75 & 0.93 & 0.93 & 0.93 \\
-Qwen 1.5B + LoRA (ours) & 1.00 & 1.00 & 1.00 & 1.00 \\
+Qwen 1.5B, untuned & 0.00 & 0.05 & 0.10 & 0.32 & 0.75 \\
+Qwen 14B, few-shot & 0.47 & 0.70 & 0.78 & 0.88 & 0.90 \\
+Gemma 4 31B, zero-shot & 0.75 & 0.93 & 0.93 & 0.93 & 0.93 \\
+Qwen 1.5B + LoRA (ours) & 1.00 & 1.00 & 1.00 & 1.00 & 1.00 \\
 \hline
 \end{tabular}
 \caption{Fine-tuning against prompting, same 40 test programs and the same zero-shot prompt for the two 1.5B rows. All on our generator's programs; Table~\ref{tab:closing_rq4} has real code.}\label{tab:finetune}

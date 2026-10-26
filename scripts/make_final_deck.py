@@ -553,13 +553,13 @@ def s_novelty(prs):
         _para(tf, rq, 30, bold=True, color=ACCENT, align=PP_ALIGN.CENTER, first=True)
         _para(tf, head, 18, bold=True, color=NAVY, align=PP_ALIGN.CENTER, space_before=4)
         _para(tf, sub, 13, color=GREY, align=PP_ALIGN.CENTER, space_before=8)
-    chips(slide, 0.75, 5.25, ["retrain → re-run RQ4–RQ6", "Gemma 31B on the edits", "interface: paste code → graph"],
+    chips(slide, 0.75, 5.25, ["retrain → re-run RQ4–RQ6", "Gemma 31B on the edits", "interface: built — live demo"],
           w=3.75, h=0.62, gap=0.27, size=13)
     notes(slide, """
 [11:40-12:00]
 • Each shortcut the closing runs exposed becomes a change to the data: live flags, varied and real-style code, and training pairs that differ only in wiring.
 • Then retrain and re-run the same three probes: do the chain and old-graph signatures go away?
-• Plus Gemma 31B on the edits, and the interface: paste code, see the predicted graph beside the truth. Thank you.
+• Plus Gemma 31B on the edits. The interface is already built: paste, upload or generate a program and see the model's graph beside the truth, with the metrics — that is the live demo. Thank you.
 """)
     return slide
 

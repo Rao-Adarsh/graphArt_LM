@@ -11,6 +11,10 @@
                recovered the topology.
 - node_f1    : overlap of the multisets of node labels
 - edge_f1    : overlap of the multisets of (source label, target label, edge label)
+- reach_f1   : connectivity preservation -- overlap of the multisets of (ancestor,
+               descendant) pairs, i.e. "B depends on A" relations through any path,
+               compared on topology labels. A graph with one edge rerouted keeps most
+               of these; a chain drawn for a branching network invents many.
 - shape_acc  : of the nodes whose label was right, how many also had the right
                shape
 
@@ -44,6 +48,14 @@ def _edge_labels(graph: dict, label=node_label) -> Counter:
     labels = {n["id"]: label(n) for n in graph["nodes"]}
     return Counter((labels.get(e["src"]), labels.get(e["dst"]), edge_label(e))
                    for e in graph["edges"])
+
+
+def _reach_pairs(graph: dict) -> Counter:
+    """Every (ancestor, descendant) pair by topology label: what depends on what."""
+    g = to_networkx(graph)
+    labels = {n["id"]: topology_label(n) for n in graph["nodes"]}
+    # .get: a malformed reply can have an edge to a node it never declared
+    return Counter((labels.get(u), labels.get(v)) for u in g for v in nx.descendants(g, u))
 
 
 def _isomorphic(pred: dict, truth: dict, label) -> bool:
@@ -106,7 +118,7 @@ def compare_nodes(pred: dict, truth: dict) -> dict:
             == Counter(topology_label(n) for n in truth["nodes"]))
     return {"valid": None, "valid_topology": None, "errors": [],
             "exact": f1["f1"] == 1.0, "exact_topo": topo,
-            "node_f1": f1["f1"], "edge_f1": None,
+            "node_f1": f1["f1"], "edge_f1": None, "reach_f1": None,
             "shape_acc": _shape_accuracy(pred, truth)}
 
 
@@ -124,4 +136,5 @@ def compare(pred: dict, truth: dict) -> dict:
     return {"valid": not errors, "valid_topology": not structural,
             "errors": errors, "exact": exact, "exact_topo": exact_topo,
             "node_f1": nodes["f1"], "edge_f1": edges["f1"],
+            "reach_f1": _f1(_reach_pairs(pred), _reach_pairs(truth))["f1"],
             "shape_acc": _shape_accuracy(pred, truth)}

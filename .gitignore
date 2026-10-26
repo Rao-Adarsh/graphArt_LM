@@ -1,7 +1,6 @@
 .venv/
 __pycache__/
 *.pyc
-data/generated/
 .ipynb_checkpoints/
 results/raw/
 
@@ -22,3 +21,9 @@ kaggle_results/
 
 # Office lock files
 ~$*
+
+# Model weights (adapters); see README for where to download them
+models/
+
+# Packaged deliverables (adapter zip for the Drive folder)
+dist/

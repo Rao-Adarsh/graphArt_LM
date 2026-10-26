@@ -5,9 +5,10 @@
     "parsed": 0.475,
     "valid": 0.0,
     "exact": 0.175,
-    "exact_topo": 0.35,
+    "exact_topo": 0.7,
     "node_f1": 0.418,
-    "edge_f1": 0.0,
+    "edge_f1": null,
+    "reach_f1": null,
     "n": 40
   },
   "by_tier": {
@@ -15,18 +16,20 @@
       "parsed": 0.5,
       "valid": 0.0,
       "exact": 0.2,
-      "exact_topo": 0.5,
+      "exact_topo": 1.0,
       "node_f1": 0.421,
-      "edge_f1": 0.0,
+      "edge_f1": null,
+      "reach_f1": null,
       "n": 10
     },
     "tier 2": {
       "parsed": 0.4,
       "valid": 0.0,
       "exact": 0.2,
-      "exact_topo": 0.2,
+      "exact_topo": 0.8,
       "node_f1": 0.334,
-      "edge_f1": 0.0,
+      "edge_f1": null,
+      "reach_f1": null,
       "n": 10
     },
     "tier 3": {
@@ -35,16 +38,18 @@
       "exact": 0.2,
       "exact_topo": 0.4,
       "node_f1": 0.643,
-      "edge_f1": 0.0,
+      "edge_f1": null,
+      "reach_f1": null,
       "n": 10
     },
     "tier 4": {
       "parsed": 0.3,
       "valid": 0.0,
       "exact": 0.1,
-      "exact_topo": 0.3,
+      "exact_topo": 0.6,
       "node_f1": 0.273,
-      "edge_f1": 0.0,
+      "edge_f1": null,
+      "reach_f1": null,
       "n": 10
     }
   },
@@ -53,18 +58,20 @@
       "parsed": 0.0,
       "valid": 0.0,
       "exact": 0.0,
-      "exact_topo": 0.0,
+      "exact_topo": 1.0,
       "node_f1": 0.0,
-      "edge_f1": 0.0,
+      "edge_f1": null,
+      "reach_f1": null,
       "n": 1
     },
     "9-15": {
       "parsed": 0.486,
       "valid": 0.0,
       "exact": 0.189,
-      "exact_topo": 0.351,
+      "exact_topo": 0.703,
       "node_f1": 0.428,
-      "edge_f1": 0.0,
+      "edge_f1": null,
+      "reach_f1": null,
       "n": 37
     },
     "16-25": {
@@ -73,7 +80,8 @@
       "exact": 0.0,
       "exact_topo": 0.5,
       "node_f1": 0.438,
-      "edge_f1": 0.0,
+      "edge_f1": null,
+      "reach_f1": null,
       "n": 2
     }
   }

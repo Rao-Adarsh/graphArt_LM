@@ -1,0 +1,6 @@
+# The interface (interface/app.py): the pipeline and the fine-tuning stack it uses to
+# run the adapter, plus gradio. Core dataset deps (torch, networkx, matplotlib) are in
+# requirements.txt.
+-r requirements-pipeline.txt
+-r requirements-finetune.txt
+gradio==6.30.0
