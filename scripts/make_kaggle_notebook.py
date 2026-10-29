@@ -51,7 +51,10 @@ CODE_FILES = ["pipeline/__init__.py", "pipeline/backends.py", "pipeline/cost.py"
 SAMPLE_FIELDS = ("id", "tier", "num_nodes", "code", "target")
 # The closing evaluation sets (RQ4, RQ5), built by build_torchvision_set.py and
 # build_edit_set.py; bundled whenever they exist.
-EVAL_SETS = ("torchvision", "edits", "rq6")
+EVAL_SETS = ("torchvision", "edits", "rq6", "large_test")
+# The library-style training set (build_large_dataset.py), bundled with train/val for
+# fine-tuning whenever it exists; select it with TRAIN_ARGS --train-split/--val-split.
+LARGE_TRAIN_SETS = ("large_train", "large_val")
 
 
 def _add(tar: tarfile.TarFile, name: str, data: bytes) -> None:
@@ -85,7 +88,9 @@ def payload(finetune: bool = False) -> tuple[dict[str, bytes], int]:
     rows = load_split("test", None, None, STRATIFY)
     if finetune:
         files["scripts/train_lora.py"] = (ROOT / "scripts" / "train_lora.py").read_bytes()
-        for split in ("train", "val"):
+        for split in ("train", "val", *LARGE_TRAIN_SETS):
+            if not (ROOT / "data" / "generated" / f"{split}.jsonl").exists():
+                continue
             full = load_split(split, None, None, None)
             files[f"data/generated/{split}.jsonl"] = "".join(
                 json.dumps({k: r[k] for k in SAMPLE_FIELDS}) + "\n" for r in full).encode("utf-8")
@@ -368,6 +373,9 @@ FINETUNE_NOTES = """
 # SMOKE_STEPS  a short first run that must show the loss falling before the real one starts.
 # TIME_BUDGET  the whole session; training stops early enough to leave an hour for scoring.
 # TRAIN_ARGS / EVAL_ARGS  extra flags for train_lora.py / run_prompting.py (normally empty).
+#              To add the library-style programs (tiers 5-6, answers up to ~6,900 tokens):
+#              TRAIN_ARGS = ["--train-split", "train,large_train", "--val-split", "val,large_val",
+#                            "--max-len", "8192"]
 # VALIDATE_ONLY True: only check the code arrived intact (works on a CPU session).
 """
 
@@ -661,7 +669,8 @@ HF_EVAL_CONFIG = (
 HF_EVAL_NOTES = """
 # BASE_MODEL   the base the uploaded adapter was trained on (read from its adapter_config.json).
 # EVALS        (prompt, data set, reply cap) jobs, run in order with the uploaded adapter.
-#              Data sets: test (the stratified 40), torchvision, edits, rq6.
+#              Data sets: test (the stratified 40), torchvision, edits, rq6, large_test (80
+#              library-style programs; give it a cap of ~7000 for the whole networks).
 # TIME_BUDGET  the whole session; a job that would not fit is skipped, one in progress keeps
 #              every reply finished so far (replies are cached one by one).
 # EVAL_ARGS    extra flags for run_prompting.py, e.g. ["--limit", "2"] for a quick try.

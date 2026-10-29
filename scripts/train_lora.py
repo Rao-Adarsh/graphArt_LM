@@ -10,7 +10,11 @@ recite the instructions. Using the same prompt before and after tuning keeps the
 comparison with the prompted models clean.
 
 The val split chooses the checkpoint (lowest val loss). The test split is never
-read here.
+read here. `--train-split` / `--val-split` take any splits under data/generated/,
+comma-separated, so the library-style set (build_large_dataset.py) can be added or
+used alone:
+
+    python scripts/train_lora.py --out lora/mixed --train-split train,large_train --val-split val,large_val --max-len 8192
 
 The adapter it saves is scored like any other model:
 
@@ -62,8 +66,13 @@ CONSTRUCTS = {"dead_branch": has_dead_branch}
 
 
 def load_rows(split: str, limit: int | None, exclude: str | None = None) -> list[dict]:
-    path = ROOT / "data" / "generated" / f"{split}.jsonl"
-    rows = [json.loads(line) for line in path.open(encoding="utf-8")]
+    """Rows of one split, or of several given comma-separated, in that order."""
+    rows = []
+    for name in split.split(","):
+        path = ROOT / "data" / "generated" / f"{name.strip()}.jsonl"
+        if not path.exists():
+            raise SystemExit(f"{path} not found -- build that split first")
+        rows += [json.loads(line) for line in path.open(encoding="utf-8")]
     if exclude:
         kept = [r for r in rows if not CONSTRUCTS[exclude](r)]
         print(f"{split}: held out {len(rows) - len(kept)} of {len(rows)} programs with a {exclude}",
@@ -141,6 +150,8 @@ def main() -> None:
                     help="encode every train/val example, report lengths, and exit -- "
                          "no model is loaded, so it runs anywhere in seconds")
     ap.add_argument("--eval-steps", type=int, default=40)
+    ap.add_argument("--train-split", default="train", help="split(s) to train on, comma-separated")
+    ap.add_argument("--val-split", default="val", help="split(s) that choose the checkpoint, comma-separated")
     ap.add_argument("--limit-train", type=int, help="only the first N train samples")
     ap.add_argument("--limit-val", type=int, help="only the first N val samples")
     ap.add_argument("--exclude-construct", choices=sorted(CONSTRUCTS),
@@ -158,9 +169,9 @@ def main() -> None:
 
     system, template = load_prompt(PROMPT)
     train = [encode(tokenizer, system, template, r, args.max_len)
-             for r in load_rows("train", args.limit_train, args.exclude_construct)]
+             for r in load_rows(args.train_split, args.limit_train, args.exclude_construct)]
     val = [encode(tokenizer, system, template, r, args.max_len)
-           for r in load_rows("val", args.limit_val, args.exclude_construct)]
+           for r in load_rows(args.val_split, args.limit_val, args.exclude_construct)]
     lengths = [len(e["input_ids"]) for e in train + val]
     print(f"{len(train)} train / {len(val)} val examples; tokens per example "
           f"mean {sum(lengths) / len(lengths):.0f}, max {max(lengths)} (limit {args.max_len})",
@@ -217,6 +228,7 @@ def main() -> None:
     tokenizer.save_pretrained(str(out))
     evals = [h for h in trainer.state.log_history if "eval_loss" in h]
     summary = {"base": args.base, "prompt": PROMPT, "excluded_construct": args.exclude_construct,
+               "train_split": args.train_split, "val_split": args.val_split, "max_len": args.max_len,
                "train_examples": len(train),
                "val_examples": len(val), "epochs": args.epochs, "lr": args.lr,
                "rank": args.rank, "alpha": args.alpha,

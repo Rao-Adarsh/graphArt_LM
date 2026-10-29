@@ -170,6 +170,32 @@ cleanly. The smallest with genuine branching are `squeezenet1_1` (68 nodes, 8 me
 `resnet18` (71, 8); `vgg11` and `alexnet` are pure chains and useless as topology tests.
 That measurement is what sets the 80-node cap in the dataset builder.
 
+### Library-style set (`graphart/generate_large.py`)
+
+The closing experiments showed the tuned model learned the first generator's shortcuts
+(one class per program, the input always `x`, every flag `False`, a fixed menu of layers),
+so a second generator writes programs the way torchvision does. Tier 5 is one building
+block; tier 6 is a whole small network built from it, in seven families: ResNet basic and
+bottleneck, Inception, inverted residual (with optional squeeze-excitation), SqueezeNet
+Fire, DenseNet, ShuffleNet and a ViT-style encoder. The code has helper classes and helper
+functions, `_make_layer`-style stages (paths like `stage1.0.shortcut.0`), `Optional`
+sub-modules checked with `is not None`, flags that are `True` as often as `False`,
+depthwise and grouped convolutions, kernels like `(1, 7)`, `F.` functions, tensor methods,
+and inputs named `input`, `feats`, `z` as well as `x`.
+
+| Tier | Programs | Nodes min / mean / max | Merges / graph | Answer tokens (max) |
+|---|---|---|---|---|
+| 5 block | 400 | 8 / 17.4 / 38 | 1.85 | ~1,600 |
+| 6 network | 400 | 25 / 64.1 / 120 | 6.53 | ~6,900 |
+
+`scripts/build_large_dataset.py --per-tier 400` writes `data/generated/large_{train,val,test}.jsonl`
+(640 / 80 / 80), so every tool reads it by split name: `run_prompting --split large_test`,
+`score`, `classify_errors`, and `train_lora.py --train-split train,large_train --val-split
+val,large_val --max-len 8192`. Duplicates are removed by graph isomorphism (the first builder
+compared text, which let 4 isomorphic duplicates through), and any program
+topology-isomorphic to one of the 21 torchvision samples is rejected, so torchvision stays an
+out-of-distribution test.
+
 ---
 
 ## Evaluation (`graphart/validate.py`, `graphart/metrics.py`)
