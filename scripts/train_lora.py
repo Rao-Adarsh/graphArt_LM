@@ -46,6 +46,7 @@ IGNORE = -100                       # label value the loss skips
 # other failure (a crash with a traceback, exit 1) is a bug and stops the session.
 EXIT_NOT_LEARNING = 3
 EXIT_NONFINITE_LOSS = 4
+EXIT_OUT_OF_MEMORY = 5               # --memory-check: the longest examples do not fit
 
 
 class NonFiniteLoss(RuntimeError):
@@ -158,6 +159,11 @@ def main() -> None:
                     help="leave every train and val program containing this construct out (RQ6)")
     ap.add_argument("--smoke-steps", type=int,
                     help="train N steps only, then exit non-zero unless the loss is finite and falling")
+    ap.add_argument("--drop-over-max", action="store_true",
+                    help="leave out examples longer than --max-len (reported) instead of stopping")
+    ap.add_argument("--memory-check", type=int, metavar="N",
+                    help="run forward and backward on the N longest train examples, report peak GPU "
+                         "memory, and exit (5 if they do not fit) -- minutes, not hours, to find out")
     ap.add_argument("--time-budget-hours", type=float, default=9.0)
     ap.add_argument("--fp32", action="store_true", help="no fp16, even on a GPU (slower, never overflows)")
     args = ap.parse_args()
@@ -168,10 +174,23 @@ def main() -> None:
     pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
 
     system, template = load_prompt(PROMPT)
-    train = [encode(tokenizer, system, template, r, args.max_len)
-             for r in load_rows(args.train_split, args.limit_train, args.exclude_construct)]
-    val = [encode(tokenizer, system, template, r, args.max_len)
-           for r in load_rows(args.val_split, args.limit_val, args.exclude_construct)]
+
+    def encode_all(rows: list[dict], name: str) -> list[dict]:
+        out, dropped = [], []
+        for r in rows:
+            try:
+                out.append(encode(tokenizer, system, template, r, args.max_len))
+            except ValueError:
+                if not args.drop_over_max:
+                    raise
+                dropped.append(r["id"])
+        if dropped:
+            print(f"{name}: left out {len(dropped)} examples over --max-len {args.max_len}: "
+                  f"{', '.join(dropped[:8])}{' ...' if len(dropped) > 8 else ''}", flush=True)
+        return out
+
+    train = encode_all(load_rows(args.train_split, args.limit_train, args.exclude_construct), "train")
+    val = encode_all(load_rows(args.val_split, args.limit_val, args.exclude_construct), "val")
     lengths = [len(e["input_ids"]) for e in train + val]
     print(f"{len(train)} train / {len(val)} val examples; tokens per example "
           f"mean {sum(lengths) / len(lengths):.0f}, max {max(lengths)} (limit {args.max_len})",
@@ -186,6 +205,31 @@ def main() -> None:
         r=args.rank, lora_alpha=args.alpha, lora_dropout=0.05, bias="none", task_type="CAUSAL_LM",
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]))
     model.print_trainable_parameters()
+
+    if args.memory_check:
+        # The longest examples set the peak: if they fit here, every step of the real
+        # run fits. Forward + backward only -- the LoRA optimizer state is a few MB.
+        device = "cuda" if cuda else "cpu"
+        model.to(device).train()
+        longest = sorted(train, key=lambda e: len(e["input_ids"]), reverse=True)[:args.memory_check]
+        try:
+            for e in longest:
+                batch = collate(pad_id)([e])
+                batch = {k: v.to(device) for k, v in batch.items()}
+                with torch.autocast(device_type=device, dtype=torch.float16, enabled=fp16):
+                    loss = model(**batch).loss
+                loss.backward()
+                model.zero_grad(set_to_none=True)
+                if cuda:
+                    print(f"  {len(e['input_ids'])} tokens: peak {torch.cuda.max_memory_allocated() / 2**30:.1f} GB "
+                          f"of {torch.cuda.get_device_properties(0).total_memory / 2**30:.1f}", flush=True)
+        except torch.cuda.OutOfMemoryError:
+            print(f"OUT OF MEMORY on a {len(e['input_ids'])}-token example -- use a smaller "
+                  "--max-len with --drop-over-max", flush=True)
+            raise SystemExit(EXIT_OUT_OF_MEMORY)
+        print(f"memory check passed on the {len(longest)} longest examples "
+              f"({len(longest[0]['input_ids'])} tokens at most)", flush=True)
+        return
 
     smoke = args.smoke_steps is not None
     training_args = TrainingArguments(
