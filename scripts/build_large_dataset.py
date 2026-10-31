@@ -13,7 +13,8 @@ Two things differ from build_dataset.py, both learned from the first dataset:
   first builder compared text, so the same graph written in another node order
   slipped through: 4 of its 160 test graphs repeat a training graph.
 - Any program whose graph is topology-isomorphic to one of the 21 torchvision
-  samples is rejected, so the torchvision set stays a real out-of-distribution test.
+  samples, or to one of the 17 held-out torchvision samples, is rejected, so both
+  stay real out-of-distribution tests.
 
 Families are drawn in rotation, so every family gets the same share of each tier.
 """
@@ -82,12 +83,13 @@ def main() -> None:
     out = ROOT / args.out
     out.mkdir(parents=True, exist_ok=True)
     torchvision = Seen(topology_label)
-    tv_path = ROOT / "data" / "generated" / "torchvision.jsonl"
-    if tv_path.exists():
-        for r in map(json.loads, tv_path.open(encoding="utf-8")):
-            torchvision.add(r["graph"])
-    else:
-        print("note: data/generated/torchvision.jsonl not found -- not filtering against it")
+    for name in ("torchvision", "torchvision_holdout"):
+        tv_path = ROOT / "data" / "generated" / f"{name}.jsonl"
+        if tv_path.exists():
+            for r in map(json.loads, tv_path.open(encoding="utf-8")):
+                torchvision.add(r["graph"])
+        else:
+            print(f"note: data/generated/{name}.jsonl not found -- not filtering against it")
     seen = Seen(node_label)
     splits: dict[str, list] = {"train": [], "val": [], "test": []}
     report: Counter = Counter()

@@ -1,0 +1,34 @@
+{
+ "torchvision_holdout": {
+  "frozen_on": "2026-10-31",
+  "sha256": "89424d00f5dc9c3ded85983caa713b6fc5a5a2a1b82ac05624e4d63d900eb9f6",
+  "samples": 17,
+  "ids": [
+   "tvh-mobilenetv3-se",
+   "tvh-mobilenetv3-hs-down",
+   "tvh-efficientnet-mbconv",
+   "tvh-efficientnet-mbconv-down",
+   "tvh-efficientnet-fused",
+   "tvh-convnext-block",
+   "tvh-regnet-bottleneck",
+   "tvh-deeplabv3-aspp",
+   "tvh-r3d-block",
+   "tvh-r2plus1d-block",
+   "tvh-mc3-bottleneck",
+   "tvh-s3d-sepinception",
+   "tvh-raft-residual-down",
+   "tvh-raft-bottleneck",
+   "tvh-vgg11",
+   "tvh-r3d-small",
+   "tvh-mobilenetv3-small"
+  ],
+  "torchvision": "0.29.1+cpu",
+  "protocol": [
+   "Frozen before the generator was changed in response to the first 21 torchvision samples' errors.",
+   "Never used to design or tune the generator, the prompts or the training; no model replies on it are opened before the final evaluation.",
+   "Scored once per final model: zero_shot prompt, all 17 samples, reply cap 8000 tokens (the longest reference, tvh-mobilenetv3-small, is 7220).",
+   "Reported with the unchanged scorer and scripts/classify_errors.py, blocks (14) and whole networks (3) separately.",
+   "build_large_dataset.py rejects any generated program topology-isomorphic to one of these graphs."
+  ]
+ }
+}

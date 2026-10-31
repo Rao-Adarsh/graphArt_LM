@@ -1,0 +1,22 @@
+id,category,detail
+tv-resnet-basicblock,exact,
+tv-resnet-basicblock-down,exact,
+tv-resnet-bottleneck,notation,
+tv-squeezenet-fire,exact,
+tv-googlenet-inception,wrong_ops,missing: call/relu x3; call_module/branch2.1.conv/Conv2d; call_module/branch2.1.bn/BatchNorm2d | extra: call_module/branch2.0.conv/Conv2d; call_module/branch2.0.bn/BatchNorm2d
+tv-inceptionv3-a,wrong_ops,missing: call/relu x3 | extra: -
+tv-inceptionv3-b,wrong_ops,missing: call_module/branch3x3.conv/Conv2d; call_module/branch3x3.bn/BatchNorm2d; call/relu x3; call_module/branch3x3dbl_1.conv/Conv2d; call_module/branch3x3dbl_1.bn/BatchNorm2d; call_module/branch3x3dbl_2.conv/Conv2d | extra: call_module/branch3x3/Conv2d; call_module/branch3x3bn/BatchNorm2d; call_module/branch3x3dbl_1/Conv2d; call_module/branch3x3dbl_2/Conv2d; call_module/branch3x3dbl_3/Conv2d
+tv-inceptionv3-c,wrong_ops,missing: call/relu x8; call_module/branch7x7_2.conv/Conv2d; call_module/branch7x7_2.bn/BatchNorm2d; call_module/branch7x7_3.conv/Conv2d; call_module/branch7x7_3.bn/BatchNorm2d; call_module/branch7x7dbl_5.conv/Conv2d | extra: call_module/branch7x7_1.conv/Conv2d x2; call_module/branch7x7_1.bn/BatchNorm2d x2; call_module/branch7x7dbl_1.conv/Conv2d x3; call_module/branch7x7dbl_1.bn/BatchNorm2d x3; call_module/branch7x7dbl_2.conv/Conv2d x3; call_module/branch7x7dbl_2.bn/BatchNorm2d x3
+tv-shufflenet-unit,wrong_ops,missing: call_module/branch2.3/Conv2d | extra: call_module/branch2.3/depthwise_conv
+tv-shufflenet-unit-down,wrong_ops,missing: call_module/branch1.0/Conv2d; call_module/branch1.1/BatchNorm2d; call_module/branch1.2/Conv2d; call_module/branch1.3/BatchNorm2d; call/relu; call_module/branch2.3/Conv2d | extra: call/chunk; call/getitem x2; call_module/branch2.3/depthwise_conv
+tv-vit-encoderblock,wrong_ops,missing: call/dim; call/operator.eq; call/builtins.getattr; call/_assert; call_module/mlp.2/Dropout; call_module/mlp.3/Linear | extra: call_module/mlp.2/Linear
+tv-inceptionv3-d,wrong_ops,missing: call/max_pool2d | extra: -
+tv-inceptionv3-e,wrong_ops,missing: call/relu x6 | extra: call/cat
+tv-inceptionv3-aux,notation,
+tv-googlenet-aux,wrong_ops,missing: call_module/conv.conv/Conv2d; call_module/conv.bn/BatchNorm2d; call/relu | extra: call_module/conv.0/Conv2d; call_module/conv.1/BatchNorm2d
+tv-mnasnet-residual,wrong_ops,missing: call/add | extra: -
+tv-mnasnet-down,exact,
+tv-mobilenetv2-residual,wrong_ops,missing: call_module/conv.1.0/Conv2d; call_module/conv.1.1/BatchNorm2d; call_module/conv.2/Conv2d; call_module/conv.3/BatchNorm2d; call/add | extra: call_module/conv.1/Conv2d; call_module/conv.2/BatchNorm2d
+tv-alexnet,notation,
+tv-squeezenet1_1,unparseable,line 129: cannot parse '37 -> 38 :'
+tv-resnet18,unparseable,"line 99: cannot parse '96 call_module layer4.2.bn1 BatchNorm2d(features=512) [1,512'"

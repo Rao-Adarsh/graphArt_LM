@@ -30,7 +30,6 @@ prompt changes, or the notebook will send the old one.
 
 import argparse
 import base64
-import gzip
 import hashlib
 import io
 import json
@@ -50,8 +49,9 @@ CODE_FILES = ["pipeline/__init__.py", "pipeline/backends.py", "pipeline/cost.py"
               "pipeline/run_prompting.py"]
 SAMPLE_FIELDS = ("id", "tier", "num_nodes", "code", "target")
 # The closing evaluation sets (RQ4, RQ5), built by build_torchvision_set.py and
-# build_edit_set.py; bundled whenever they exist.
-EVAL_SETS = ("torchvision", "edits", "rq6", "large_test")
+# build_edit_set.py; bundled whenever they exist. torchvision_holdout is frozen (see
+# data/generated/FROZEN.json): score it once, on the final model, with an 8000 cap.
+EVAL_SETS = ("torchvision", "edits", "rq6", "large_test", "torchvision_holdout")
 # The library-style training set (build_large_dataset.py), bundled with train/val for
 # fine-tuning whenever it exists; select it with TRAIN_ARGS --train-split/--val-split.
 LARGE_TRAIN_SETS = ("large_train", "large_val")
@@ -106,9 +106,10 @@ def _tar(files: dict[str, bytes]) -> bytes:
 
 
 def bundle(files: dict[str, bytes]) -> tuple[str, str]:
-    """Base64 tar.gz of the files, for the .ipynb's unpack cell, and its sha256."""
-    # gzip stamps the current time into its header unless told otherwise.
-    data = gzip.compress(_tar(files), compresslevel=9, mtime=0)
+    """Base64 tar.xz of the files, for the .ipynb's unpack cell, and its sha256."""
+    # xz, not gzip: the training splits are repetitive JSON, and gzip left the
+    # notebook over Kaggle's 1 MB limit on kernel source.
+    data = lzma.compress(_tar(files), preset=9 | lzma.PRESET_EXTREME)
     return base64.b64encode(data).decode("ascii"), hashlib.sha256(data).hexdigest()
 
 
@@ -123,7 +124,7 @@ DEFAULT_PROMPTS = ["zero_shot", "nodes_only", "edges_only", "cot", "cos", "few_s
 
 # cot and cos write their working before the graph, and torchvision's whole networks
 # need ~3000-token answers; the runner's default cap (1500 tokens) would cut them off.
-LONG_PROMPTS, LONG_SETS = ("cot", "cos"), ("torchvision",)
+LONG_PROMPTS, LONG_SETS = ("cot", "cos"), ("torchvision", "torchvision_holdout")
 
 
 def job(model: str, prompt: str, split: str = "test", stratify: int | None = STRATIFY,
@@ -169,7 +170,7 @@ BUNDLE = (
 data = base64.b64decode(BUNDLE)
 assert hashlib.sha256(data).hexdigest() == BUNDLE_SHA256, "bundle damaged -- regenerate the notebook"
 REPO.mkdir(parents=True, exist_ok=True)
-with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
+with tarfile.open(fileobj=io.BytesIO(data), mode="r:xz") as tar:
     tar.extractall(REPO)
 os.chdir(REPO)
 if str(REPO) not in sys.path:

@@ -24,6 +24,7 @@ The adapter it saves is scored like any other model:
 import argparse
 import json
 import math
+import os
 import sys
 import time
 from pathlib import Path
@@ -31,8 +32,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+# Must be set before CUDA starts. Without it, examples of very different lengths leave
+# the cache fragmented: the first Kaggle run of the mixed set died asking for 3.5 GB
+# with 3.4 GB free and 2.1 GB more reserved but unusable.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
 import torch
+import torch.nn.functional as F
 from peft import LoraConfig, get_peft_model
+from torch.utils.checkpoint import checkpoint
 from transformers import (AutoModelForCausalLM, AutoTokenizer, Trainer, TrainerCallback,
                           TrainingArguments)
 
@@ -47,6 +55,8 @@ IGNORE = -100                       # label value the loss skips
 EXIT_NOT_LEARNING = 3
 EXIT_NONFINITE_LOSS = 4
 EXIT_OUT_OF_MEMORY = 5               # --memory-check: the longest examples do not fit
+MEMORY_HEADROOM = 0.85               # --memory-check fails above this share of the GPU
+LOSS_CHUNK = 1024                    # answer tokens whose logits exist at once
 
 
 class NonFiniteLoss(RuntimeError):
@@ -108,6 +118,42 @@ def collate(pad_id: int):
     return fn
 
 
+def lean_loss(model, batch: dict, num_items=None, fp16: bool = False):
+    """The causal-LM loss on the answer tokens, without the full logits.
+
+    The default forward builds logits over the 151,936-token vocabulary at every
+    position and upcasts them to fp32 for the loss: ~3.5 GB per copy at 6,000 tokens,
+    most of a T4's memory, and spent on prompt positions the loss ignores. Here the
+    logits are made for answer positions only, one chunk at a time, and recomputed in
+    backward. Same value as the default loss: a sum over answer tokens divided by
+    `num_items` (the Trainer's count across gradient accumulation) or by their number.
+    """
+    causal = model.get_base_model()
+    with torch.autocast(device_type=batch["input_ids"].device.type, dtype=torch.float16, enabled=fp16):
+        hidden = causal.model(input_ids=batch["input_ids"],
+                              attention_mask=batch["attention_mask"]).last_hidden_state
+        labels = batch["labels"][:, 1:]          # position t predicts token t+1
+        keep = labels != IGNORE
+        h, y = hidden[:, :-1][keep], labels[keep]
+
+        def chunk_loss(h, y):
+            return F.cross_entropy(causal.lm_head(h).float(), y, reduction="sum")
+
+        total = sum(checkpoint(chunk_loss, h[i:i + LOSS_CHUNK], y[i:i + LOSS_CHUNK], use_reentrant=False)
+                    for i in range(0, len(y), LOSS_CHUNK))
+    return total / (num_items if num_items is not None else len(y))
+
+
+class LeanLossTrainer(Trainer):
+    def __init__(self, *args, fp16: bool = False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.lean_fp16 = fp16
+
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        loss = lean_loss(self.accelerator.unwrap_model(model), inputs, num_items_in_batch, self.lean_fp16)
+        return (loss, {"loss": loss}) if return_outputs else loss
+
+
 class Guard(TrainerCallback):
     """Stop on a non-finite loss (Qwen2.5 can overflow in fp16), and when the time
     budget runs out -- the best checkpoint so far is still kept."""
@@ -128,6 +174,7 @@ class Guard(TrainerCallback):
             print(f"time budget spent at step {state.global_step}; stopping", flush=True)
             control.should_training_stop = True
             control.should_save = True
+            control.should_evaluate = True       # so the last steps can be the best checkpoint
 
 
 def main() -> None:
@@ -207,22 +254,30 @@ def main() -> None:
     model.print_trainable_parameters()
 
     if args.memory_check:
-        # The longest examples set the peak: if they fit here, every step of the real
-        # run fits. Forward + backward only -- the LoRA optimizer state is a few MB.
+        # The longest examples set the peak, through the same loss as training. Forward
+        # + backward only -- the LoRA optimizer state is a few MB. Fitting is not
+        # enough: the Trainer and the cache need room too, so the peak must stay under
+        # MEMORY_HEADROOM of the GPU (the first run passed at 95% and died 10 steps in).
         device = "cuda" if cuda else "cpu"
         model.to(device).train()
         longest = sorted(train, key=lambda e: len(e["input_ids"]), reverse=True)[:args.memory_check]
+        total = torch.cuda.get_device_properties(0).total_memory if cuda else 0
         try:
             for e in longest:
                 batch = collate(pad_id)([e])
                 batch = {k: v.to(device) for k, v in batch.items()}
-                with torch.autocast(device_type=device, dtype=torch.float16, enabled=fp16):
-                    loss = model(**batch).loss
-                loss.backward()
+                if cuda:
+                    torch.cuda.reset_peak_memory_stats()
+                lean_loss(model, batch, fp16=fp16).backward()
                 model.zero_grad(set_to_none=True)
                 if cuda:
-                    print(f"  {len(e['input_ids'])} tokens: peak {torch.cuda.max_memory_allocated() / 2**30:.1f} GB "
-                          f"of {torch.cuda.get_device_properties(0).total_memory / 2**30:.1f}", flush=True)
+                    peak = torch.cuda.max_memory_allocated()
+                    print(f"  {len(e['input_ids'])} tokens: peak {peak / 2**30:.1f} GB "
+                          f"of {total / 2**30:.1f}", flush=True)
+                    if peak > MEMORY_HEADROOM * total:
+                        print(f"TOO CLOSE: over {MEMORY_HEADROOM:.0%} of the GPU on a {len(e['input_ids'])}-token "
+                              "example -- use a smaller --max-len with --drop-over-max", flush=True)
+                        raise SystemExit(EXIT_OUT_OF_MEMORY)
         except torch.cuda.OutOfMemoryError:
             print(f"OUT OF MEMORY on a {len(e['input_ids'])}-token example -- use a smaller "
                   "--max-len with --drop-over-max", flush=True)
@@ -245,8 +300,8 @@ def main() -> None:
         fp16=fp16, report_to="none", seed=0, data_seed=0, remove_unused_columns=False,
         dataloader_num_workers=0)
     guard = Guard(args.time_budget_hours * 3600)
-    trainer = Trainer(model=model, args=training_args, train_dataset=train, eval_dataset=val,
-                      data_collator=collate(pad_id), callbacks=[guard])
+    trainer = LeanLossTrainer(model=model, args=training_args, train_dataset=train, eval_dataset=val,
+                              data_collator=collate(pad_id), callbacks=[guard], fp16=fp16)
 
     started = time.time()
     try:
