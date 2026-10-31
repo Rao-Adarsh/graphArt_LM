@@ -32,6 +32,18 @@ any program whose graph is isomorphic to a torchvision sample.
 
 As in generate.py, what the network is and how its code is written are separate
 decisions: `LStyle` picks the idioms, the family functions pick the structure.
+
+SECOND ROUND (after Session 1)
+------------------------------
+The adapter trained on this set got 7/21 torchvision graphs right. Its misses on those
+21 pointed at idioms still missing here, now added: the conv unit as torchvision's
+BasicConv2d (`**kwargs` passed to nn.Conv2d, ending in `F.relu(x, inplace=True)`) or as
+an nn.Sequential subclass; building blocks passed in (`conv_block=None`,
+`norm_layer=None`, then a default); helper methods that return a layer
+(`@staticmethod depthwise_conv`); Inception branches that fork into a (1,3) and a (3,1)
+conv and re-join; `assert` and `torch._assert`. The held-out torchvision set
+(data/generated/torchvision_holdout.jsonl) was frozen before this round and played no
+part in it.
 """
 
 import random
@@ -44,9 +56,9 @@ HEADERS_PLAIN = [
     "import torch\nfrom torch import nn\nfrom torch.nn import functional as F",
 ]
 HEADERS_TYPED = [
-    "from typing import List, Optional\n\nimport torch\nimport torch.nn as nn\n"
+    "from typing import Callable, List, Optional\n\nimport torch\nimport torch.nn as nn\n"
     "import torch.nn.functional as F\nfrom torch import Tensor",
-    "from typing import List, Optional\n\nimport torch\nfrom torch import Tensor, nn\n"
+    "from typing import Any, Callable, List, Optional\n\nimport torch\nfrom torch import Tensor, nn\n"
     "import torch.nn.functional as F",
 ]
 INPUT_NAMES = ["x", "x", "x", "input", "inp", "feats", "tensor", "z"]
@@ -69,23 +81,46 @@ class LStyle:
         self.inplace = rng.random() < 0.6
         self.act_idiom = rng.choice(["shared", "separate", "functional"])
         self.long_super = rng.random() < 0.25
-        # the conv-norm-act helper: a class with forward(), or a function returning nn.Sequential
-        self.helper_kind = rng.choice(["class", "class", "function"])
-        self.helper = (rng.choice(["BasicConv2d", "ConvBNReLU", "ConvNormAct", "ConvBlock", "ConvUnit"])
-                       if self.helper_kind == "class"
-                       else rng.choice(["conv_bn", "conv_bn_act", "conv_block", "make_conv"]))
-        self.helper_act_flag = rng.choice(["identity", "flag"])
+        # The conv-norm-act helper:
+        #   class       explicit arguments, forward() ends in an activation module or F.<act>
+        #   kwargs      torchvision's BasicConv2d: (in, out, **kwargs) passed on to nn.Conv2d,
+        #               so callers give padding themselves
+        #   sequential  a class that subclasses nn.Sequential (paths like conv.1.0)
+        #   function    a function returning nn.Sequential
+        self.helper_kind = rng.choice(["class", "kwargs", "sequential", "function"])
+        self.helper = rng.choice({
+            "class": ["BasicConv2d", "ConvBNReLU", "ConvNormAct", "ConvBlock", "ConvUnit"],
+            "kwargs": ["BasicConv2d", "ConvBN", "ConvLayer", "BasicConv"],
+            "sequential": ["ConvBNActivation", "ConvNormActivation", "ConvBNAct", "Conv2dBNAct"],
+            # never `conv_block`: that is the injected argument's name
+            "function": ["conv_bn", "conv_bn_act", "conv_bn_relu", "make_conv"]}[self.helper_kind])
+        # how a helper class applies its activation: a module (always, or behind a flag),
+        # or F.<act>(x, inplace=True) as torchvision's BasicConv2d does
+        self.helper_act_flag = rng.choice(["identity", "flag", "functional"])
+        self.inplace_fn = rng.random() < 0.5          # F.relu(x, inplace=True)
+        # torchvision passes building blocks in: conv_block=None / norm_layer=None, then
+        # `if conv_block is None: conv_block = BasicConv2d`
+        self.inject = rng.random() < 0.4
 
     def act_ctor(self) -> str:
         return f"nn.{self.act_cls}(inplace=True)" if self.inplace and self.act_cls != "GELU" \
             else f"nn.{self.act_cls}()"
 
+    def act_fn_call(self, src: str) -> str:
+        """F.<act>(src), with inplace=True when the style says so."""
+        return f"F.{self.act_fn}({src}, inplace=True)" if self.inplace_fn else f"F.{self.act_fn}({src})"
+
     def act_call(self, attr: str, src: str) -> str:
         """Apply the activation: a module attribute, or a function call."""
         if self.act_idiom == "functional":
-            fn = f"torch.{self.act_fn}" if self.act_torch and self.rng.random() < 0.4 else f"F.{self.act_fn}"
-            return f"{fn}({src})"
+            if self.act_torch and self.rng.random() < 0.4:
+                return f"torch.{self.act_fn}({src})"
+            return self.act_fn_call(src)
         return f"self.{attr}({src})"
+
+    def callable_arg(self, name: str) -> str:
+        """`name: Optional[Callable[..., nn.Module]] = None`, or `name=None` untyped."""
+        return f"{name}: Optional[Callable[..., nn.Module]] = None" if self.typed else f"{name}=None"
 
     def sig(self, args: str, ret: bool = True) -> str:
         """`def forward(self, x: Tensor) -> Tensor` or the untyped form."""
@@ -125,15 +160,66 @@ def _ind(lines: list[str], n: int) -> str:
 # --------------------------------------------------------------------------
 # shared helpers: the conv-norm-act unit, conv3x3/conv1x1
 # --------------------------------------------------------------------------
-def helper_unit(p: Program) -> str:
-    """Define the conv + BatchNorm + activation helper once; return how to call it.
+def hcall(s: LStyle, H: str, cin, cout, k, stride=None, groups=None) -> str:
+    """A call to the conv-norm-act helper (or whatever stands in for it, e.g. an injected
+    `conv_block`). The kwargs helper takes no padding of its own, so it is passed here."""
+    args = [str(cin), str(cout), f"kernel_size={k!r}"]
+    if stride is not None:
+        args.append(f"stride={stride}")
+    if s.helper_kind == "kwargs":
+        pad = k // 2 if isinstance(k, int) else tuple(x // 2 for x in k)
+        if pad:
+            args.append(f"padding={pad!r}")
+    if groups is not None:
+        args.append(f"groups={groups}")
+    return f"{H}({', '.join(args)})"
 
-    Call signature in every family: H(in, out, kernel_size=..., stride=..., groups=..., act=...)
+
+def helper_unit(p: Program) -> str:
+    """Define the conv + BatchNorm + activation helper once; return its name.
+
+    Call it through hcall(): H(in, out, kernel_size=..., stride=..., groups=...)
     """
     s = p.style
     name = s.helper
+    a = s.arg
     pad = ("(kernel_size - 1) // 2 if isinstance(kernel_size, int) "
            "else tuple((k - 1) // 2 for k in kernel_size)")
+    if s.helper_kind == "kwargs":
+        eps = s.rng.choice(["", ", eps=0.001"])
+        if s.helper_act_flag == "functional" or s.rng.random() < 0.5:
+            act_init, tail = "", f"return {s.act_fn_call(a)}"
+        else:
+            act_init, tail = f"\n        self.act = {s.act_ctor()}", f"return self.act({a})"
+        kw = "**kwargs: Any" if s.typed and "Any" in s.imports else "**kwargs"
+        p.add(name, f'''
+class {name}(nn.Module):
+    def __init__(self, in_channels, out_channels, {kw}):
+        {s.super_line(name)}
+        self.conv = nn.Conv2d(in_channels, out_channels, bias=False, **kwargs)
+        self.bn = nn.BatchNorm2d(out_channels{eps}){act_init}
+
+    def forward{s.sig(f"self, {a}")}:
+        {a} = self.conv({a})
+        {a} = self.bn({a})
+        {tail}
+''')
+        return name
+    if s.helper_kind == "sequential":
+        sup = f"super({name}, self).__init__(*layers)" if s.long_super else "super().__init__(*layers)"
+        p.add(name, f'''
+class {name}(nn.Sequential):
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, groups=1, act=True):
+        padding = {pad}
+        layers = [
+            nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, groups=groups, bias=False),
+            nn.BatchNorm2d(out_channels),
+        ]
+        if act:
+            layers.append({s.act_ctor()})
+        {sup}
+''')
+        return name
     if s.helper_kind == "function":
         p.add(name, f'''
 def {name}(in_channels, out_channels, kernel_size=3, stride=1, groups=1, act=True):
@@ -148,10 +234,13 @@ def {name}(in_channels, out_channels, kernel_size=3, stride=1, groups=1, act=Tru
     return nn.Sequential(*layers)
 ''')
         return name
-    a = s.arg
     if s.helper_act_flag == "identity":
         act_init = f"        self.act = {s.act_ctor()} if act else nn.Identity()"
         body = [f"{a} = self.conv({a})", f"{a} = self.bn({a})", f"return self.act({a})"]
+    elif s.helper_act_flag == "functional":
+        act_init = "        self.use_act = act"
+        body = [f"{a} = self.conv({a})", f"{a} = self.bn({a})", "if not self.use_act:", f"    return {a}",
+                f"return {s.act_fn_call(a)}"]
     else:
         act_init = f"        self.use_act = act\n        self.act = {s.act_ctor()}"
         body = [f"{a} = self.conv({a})", f"{a} = self.bn({a})", "if self.use_act:",
@@ -218,14 +307,18 @@ def resnet_block_def(p: Program, rng: random.Random, bottleneck: bool) -> tuple[
     exp = 4 if bottleneck else 1
     width = "planes"
     inits = []
+    norm = "nn.BatchNorm2d"
+    if s.inject:          # torchvision: `norm_layer=None`, then default to BatchNorm2d
+        norm = "norm_layer"
+        inits += ["if norm_layer is None:", "    norm_layer = nn.BatchNorm2d"]
     if bottleneck:
-        inits += [f"self.{conv[0]} = {k1}(inplanes, {width})", f"self.{bn[0]} = nn.BatchNorm2d({width})",
-                  f"self.{conv[1]} = {k3}({width}, {width}, stride)", f"self.{bn[1]} = nn.BatchNorm2d({width})",
+        inits += [f"self.{conv[0]} = {k1}(inplanes, {width})", f"self.{bn[0]} = {norm}({width})",
+                  f"self.{conv[1]} = {k3}({width}, {width}, stride)", f"self.{bn[1]} = {norm}({width})",
                   f"self.{conv[2]} = {k1}({width}, planes * self.expansion)",
-                  f"self.{bn[2]} = nn.BatchNorm2d(planes * self.expansion)"]
+                  f"self.{bn[2]} = {norm}(planes * self.expansion)"]
     else:
-        inits += [f"self.{conv[0]} = {k3}(inplanes, planes, stride)", f"self.{bn[0]} = nn.BatchNorm2d(planes)",
-                  f"self.{conv[1]} = {k3}(planes, planes)", f"self.{bn[1]} = nn.BatchNorm2d(planes)"]
+        inits += [f"self.{conv[0]} = {k3}(inplanes, planes, stride)", f"self.{bn[0]} = {norm}(planes)",
+                  f"self.{conv[1]} = {k3}(planes, planes)", f"self.{bn[1]} = {norm}(planes)"]
     inits += _act_inits(s, acts) + [f"self.{down} = {down}", "self.stride = stride"]
     body = [f"{ident} = {a}", ""]
     src = a
@@ -238,6 +331,8 @@ def resnet_block_def(p: Program, rng: random.Random, bottleneck: bool) -> tuple[
     body.append(rng.choice([f"{out} += {ident}", f"{out} = {out} + {ident}"]))
     body += [f"{out} = {s.act_call(acts[-1], out)}", f"return {out}"]
     down_arg = f"{down}: Optional[nn.Module] = None" if s.typed else f"{down}=None"
+    if s.inject:
+        down_arg += ", " + s.callable_arg("norm_layer")
     p.add(cls, f'''
 class {cls}(nn.Module):
     expansion = {exp}
@@ -353,16 +448,29 @@ def inception_block_def(p: Program, rng: random.Random) -> tuple[str, callable]:
     names = [f"branch{i + 1}" for i in range(len(branches))]
     if rng.random() < 0.5:
         names = [f"branch_{'abcd'[i]}" for i in range(len(branches))]
+    # torchvision passes the conv unit in (`conv_block=None`, defaulting to BasicConv2d)
+    CB = "conv_block" if s.inject else H
     inits, fwd, outs = [], [], []
+    if s.inject:
+        inits += ["if conv_block is None:", f"    conv_block = {H}"]
     for bi, (bname, ks) in enumerate(zip(names, branches)):
         prev = "in_channels"
         var = rng.choice(["b", "y", "br"]) + str(bi + 1)
         src = a
+        # a branch can fork at its end into a (1,3) and a (3,1) conv, concatenated
+        fork = len(ks) >= 2 and rng.random() < 0.3
         for li, k in enumerate(ks):
             attr = bname if len(ks) == 1 else f"{bname}_{li + 1}"
             mult = rng.choice([1, 2]) if li else 1
             w = f"ch{bi + 1}" + (f" * {mult}" if mult > 1 else "")
-            inits.append(f"self.{attr} = {H}({prev}, {w}, kernel_size={k!r})")
+            if fork and li == len(ks) - 1:
+                inits += [f"self.{attr}a = {hcall(s, CB, prev, w, (1, 3))}",
+                          f"self.{attr}b = {hcall(s, CB, prev, w, (3, 1))}"]
+                fwd += [f"{var} = [", f"    self.{attr}a({src}),", f"    self.{attr}b({src}),", "]",
+                        f"{var} = torch.cat({var}, 1)"]
+                src, prev = var, f"({w}) * 2"
+                continue
+            inits.append(f"self.{attr} = {hcall(s, CB, prev, w, k)}")
             fwd.append(f"{var} = self.{attr}({src})")
             src, prev = var, w
         outs.append((var, prev))
@@ -375,10 +483,11 @@ def inception_block_def(p: Program, rng: random.Random) -> tuple[str, callable]:
             fwd.append(f"{var} = self.pool({a})")
         else:
             fwd.append(f"{var} = {how}({a}, kernel_size=3, stride=1, padding=1)")
-        inits.append(f"self.branch_pool = {H}(in_channels, pool_features, kernel_size=1)")
+        inits.append(f"self.branch_pool = {hcall(s, CB, 'in_channels', 'pool_features', 1)}")
         fwd.append(f"{var} = self.branch_pool({var})")
         outs.append((var, "pool_features"))
-    params = ", ".join([f"ch{i + 1}" for i in range(len(branches))] + (["pool_features"] if pool_branch else []))
+    params = ", ".join([f"ch{i + 1}" for i in range(len(branches))] + (["pool_features"] if pool_branch else [])
+                       + ([s.callable_arg("conv_block")] if s.inject else []))
     if rng.random() < 0.5:
         defs = f'''
     def _forward{s.sig(f"self, {a}", ret=False)}:
@@ -435,8 +544,8 @@ def inception_network(rng, s, p):
     a = s.arg
     stem = rng.choice([16, 24, 32])
     n_blocks = rng.randint(2, 4)
-    inits = [f"self.stem1 = {H}(3, {stem}, kernel_size=3, stride=2)",
-             f"self.stem2 = {H}({stem}, {stem}, kernel_size=3)"]
+    inits = [f"self.stem1 = {hcall(s, H, 3, stem, 3, stride=2)}",
+             f"self.stem2 = {hcall(s, H, stem, stem, 3)}"]
     fwd = [f"{a} = self.stem1({a})", f"{a} = self.stem2({a})"]
     if rng.random() < 0.6:
         fwd.append(f"{a} = F.max_pool2d({a}, kernel_size=3, stride=2)")
@@ -511,21 +620,28 @@ def inverted_residual_def(p: Program, rng: random.Random) -> str:
         body = [f"if self.{flag}:", f"    return {a} + self.conv({a})", "return self.conv(" + a + ")"]
     else:
         body = [f"out = self.conv({a})", f"if self.{flag}:", f"    out = out + {a}", "return out"]
+    # torchvision passes the norm layer in (`norm_layer=None`, defaulting to BatchNorm2d)
+    norm, norm_param, norm_default = "nn.BatchNorm2d", "", []
+    if s.inject:
+        norm, norm_param = "norm_layer", ", " + s.callable_arg("norm_layer")
+        norm_default = ["if norm_layer is None:", "    norm_layer = nn.BatchNorm2d", ""]
+    k = rng.choice([3, 3, 5])
     p.add(cls, f'''
 class {cls}(nn.Module):
-    def __init__(self, inp, oup, stride, expand_ratio{se_param}):
+    def __init__(self, inp, oup, stride, expand_ratio{se_param}{norm_param}):
         {s.super_line(cls)}
         self.stride = stride
+{_ind(norm_default, 8)}
         hidden_dim = int(round(inp * expand_ratio))
         self.{flag} = self.stride == 1 and inp == oup
 
         layers = []
         if expand_ratio != 1:
-            layers.append({H}(inp, hidden_dim, kernel_size=1))
-        layers.append({H}(hidden_dim, hidden_dim, kernel_size={rng.choice([3, 3, 5])}, stride=stride, groups=hidden_dim))
+            layers.append({hcall(s, H, "inp", "hidden_dim", 1)})
+        layers.append({hcall(s, H, "hidden_dim", "hidden_dim", k, stride="stride", groups="hidden_dim")})
 {_ind(se_line, 8)}
         layers.append(nn.Conv2d(hidden_dim, oup, 1, 1, 0, bias=False))
-        layers.append(nn.BatchNorm2d(oup))
+        layers.append({norm}(oup))
         self.conv = nn.Sequential(*layers)
 
     def forward{s.sig(f"self, {a}")}:
@@ -578,13 +694,13 @@ class {cls}(nn.Module):
         settings = [
 {cfg_txt},
         ]
-        features = [{H}(3, input_channel, kernel_size=3, stride=2)]
+        features = [{hcall(s, H, 3, "input_channel", 3, stride=2)}]
         for {unpack} in settings:
             for i in range(n):
                 stride = s if i == 0 else 1
                 features.append({call})
                 input_channel = c
-        features.append({H}(input_channel, {last}, kernel_size=1))
+        features.append({hcall(s, H, "input_channel", last, 1)})
         self.features = nn.Sequential(*features)
         self.classifier = nn.Sequential(
             nn.Dropout(p=0.2),
@@ -781,6 +897,22 @@ def {fn}(x, groups):
 ''')
     cls = rng.choice(["ShuffleUnit", "ShuffleBlock", "ShuffleResidual"])
     a = s.arg
+    # the depthwise conv: written out, or built by a helper method that returns the layer
+    # (torchvision's `@staticmethod def depthwise_conv(...) -> nn.Conv2d`)
+    dw, dw_def = None, ""
+    if rng.random() < 0.5:
+        dw = rng.choice(["depthwise_conv", "dw_conv", "_depthwise"])
+        ret = " -> nn.Conv2d" if s.typed else ""
+        dw_def = f'''
+    @staticmethod
+    def {dw}(i, o, kernel_size, stride=1, padding=0, bias=False){ret}:
+        return nn.Conv2d(i, o, kernel_size, stride, padding, bias=bias, groups=i)
+'''
+    dw1 = (f"self.{dw}(inp, inp, kernel_size=3, stride=self.stride, padding=1)" if dw else
+           "nn.Conv2d(inp, inp, kernel_size=3, stride=self.stride, padding=1, groups=inp, bias=False)")
+    dw2 = (f"self.{dw}(branch_features, branch_features, kernel_size=3, stride=self.stride, padding=1)" if dw else
+           "nn.Conv2d(branch_features, branch_features, kernel_size=3, stride=self.stride, padding=1,\n"
+           "                      groups=branch_features, bias=False)")
     p.add(cls, f'''
 class {cls}(nn.Module):
     def __init__(self, inp, oup, stride):
@@ -789,7 +921,7 @@ class {cls}(nn.Module):
         branch_features = oup // 2
         if self.stride > 1:
             self.branch1 = nn.Sequential(
-                nn.Conv2d(inp, inp, kernel_size=3, stride=self.stride, padding=1, groups=inp, bias=False),
+                {dw1},
                 nn.BatchNorm2d(inp),
                 nn.Conv2d(inp, branch_features, kernel_size=1, bias=False),
                 nn.BatchNorm2d(branch_features),
@@ -801,14 +933,13 @@ class {cls}(nn.Module):
             nn.Conv2d(inp if self.stride > 1 else branch_features, branch_features, kernel_size=1, bias=False),
             nn.BatchNorm2d(branch_features),
             nn.ReLU(inplace=True),
-            nn.Conv2d(branch_features, branch_features, kernel_size=3, stride=self.stride, padding=1,
-                      groups=branch_features, bias=False),
+            {dw2},
             nn.BatchNorm2d(branch_features),
             nn.Conv2d(branch_features, branch_features, kernel_size=1, bias=False),
             nn.BatchNorm2d(branch_features),
             nn.ReLU(inplace=True),
         )
-
+{dw_def}
     def forward{s.sig(f"self, {a}")}:
         if self.stride == 1:
             x1, x2 = {a}.chunk(2, dim=1)
@@ -894,10 +1025,18 @@ class {mlp}(nn.Sequential):
     else:                            # post-norm, as in the original transformer
         fwd = [f"h, _ = self.self_attention({a}, {a}, {a}, need_weights=False)",
                f"h = self.ln_1(self.dropout(h) + {a})", "y = self.mlp(h)", "return self.ln_2(h + y)"]
+    # A Python `assert` in __init__ adds nothing to the graph; torch._assert in forward
+    # does (dim, eq, the shape it formats into its message, and the assert itself).
+    init_assert = (["assert hidden_dim % num_heads == 0, \"hidden_dim must be divisible by num_heads\""]
+                   if rng.random() < 0.4 else [])
+    if rng.random() < 0.5:
+        fwd = [f'torch._assert({a}.dim() == 3, f"Expected (batch_size, seq_length, hidden_dim) got {{{a}.shape}}")',
+               *fwd]
     p.add(enc, f'''
 class {enc}(nn.Module):
     def __init__(self, num_heads, hidden_dim, mlp_dim, dropout=0.0):
         {s.super_line(enc)}
+{_ind(init_assert, 8)}
         self.num_heads = num_heads
         self.ln_1 = nn.LayerNorm(hidden_dim, eps=1e-6)
         self.self_attention = nn.MultiheadAttention(hidden_dim, num_heads, dropout=dropout, batch_first=True)
@@ -929,7 +1068,12 @@ def encoder_network(rng, s, p):
     seq = (size // patch) ** 2
     cls_token = rng.random() < 0.5
     layers = ",\n".join(f"            {enc}({heads}, {dim}, {dim * 2})" for _ in range(n_layers))
-    fwd = [f"x = self.conv_proj({a})", "x = x.flatten(2).transpose(1, 2)"]
+    fwd = []
+    if rng.random() < 0.4:           # ViT checks the image size before patchifying
+        fwd += [f"n, c, h, w = {a}.shape",
+                f'torch._assert(h == {size}, f"Wrong image height! Expected {size} but got {{h}}!")',
+                f'torch._assert(w == {size}, f"Wrong image width! Expected {size} but got {{w}}!")']
+    fwd += [f"x = self.conv_proj({a})", "x = x.flatten(2).transpose(1, 2)"]
     if cls_token:
         fwd += ["batch_class_token = self.class_token.expand(x.shape[0], -1, -1)",
                 "x = torch.cat([batch_class_token, x], dim=1)"]

@@ -665,10 +665,10 @@ print(f"done in {(time.time() - START) / 3600:.1f} h -- download graphart_closin
 # Estimated from Phase 2 (97 min for 2 x 1280 examples of ~1400 tokens): one epoch of
 # 1920 examples averaging ~1900 tokens is ~1.6 h. Scoring needs ~0.8 h.
 FINETUNE_LARGE_CONFIG = (
-    'BASE_MODEL = "Qwen/Qwen2.5-Coder-1.5B-Instruct"; ADAPTER = "qwen2.5-coder-1.5b-graphart-lora-mixed"; '
+    'BASE_MODEL = "Qwen/Qwen2.5-Coder-1.5B-Instruct"; ADAPTER = "qwen2.5-coder-1.5b-graphart-lora-mixed-v2"; '
     'EPOCHS = 1.0; TRAIN_ARGS = ["--train-split", "train,large_train", "--val-split", "val,large_val", '
     '"--max-len", "8192", "--eval-steps", "40"]; FALLBACK_MAX_LEN = 6144; MEMORY_CHECK = 6; SMOKE_STEPS = 8; '
-    'EVALS = [("test", None), ("torchvision", 3200)]; EVAL_RESERVE_HOURS = 0.8; TIME_BUDGET_HOURS = 2.5; '
+    'EVALS = [("test", None), ("torchvision", 4500)]; EVAL_RESERVE_HOURS = 0.8; TIME_BUDGET_HOURS = 2.5; '
     'EVAL_ARGS = []; VALIDATE_ONLY = False')
 
 FINETUNE_LARGE_NOTES = """
@@ -681,6 +681,8 @@ FINETUNE_LARGE_NOTES = """
 # MEMORY_CHECK forward + backward on this many of the longest examples, before anything else.
 # EVALS        (data set, reply cap) scored after training: the 40 stratified test programs
 #              (did the old skill survive?) and the 21 torchvision samples (real code).
+#              Cap 4500: at 3200 both whole networks were cut off mid-answer in Session 1
+#              (the longest reference is 2956 tokens; replies run longer).
 # EVAL_RESERVE_HOURS  kept back from training for EVALS.
 # VALIDATE_ONLY True: only check the code arrived intact (works on a CPU session).
 """
