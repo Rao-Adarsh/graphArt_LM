@@ -184,10 +184,16 @@ def _input_slots(node: torch.fx.Node, order: dict) -> dict[int, list[int]]:
 
 
 def graph_from_module(model: torch.nn.Module, *, example_input: torch.Tensor | None = None,
-                      leaf_depth: int | None = None, leaf_paths: frozenset = frozenset()) -> dict:
-    """Trace `model` and return the forward pass in our graph schema."""
+                      leaf_depth: int | None = None, leaf_paths: frozenset = frozenset(),
+                      tracer: torch.fx.Tracer | None = None) -> dict:
+    """Trace `model` and return the forward pass in our graph schema.
+
+    `tracer` replaces the default GranularTracer, e.g. one that also records where in
+    the source each node came from (graphart/cos_trace.py). Node ids are the order of
+    the traced graph either way.
+    """
     model = model.eval()
-    graph = GranularTracer(leaf_depth, leaf_paths).trace(model)
+    graph = (tracer or GranularTracer(leaf_depth, leaf_paths)).trace(model)
     modules = dict(model.named_modules())
 
     # Shapes are a bonus, not a requirement. ShapeProp itself succeeded on all

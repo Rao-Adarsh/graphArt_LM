@@ -1,0 +1,13 @@
+Given this PyTorch module and the torch.fx nodes of its forward pass, write how they
+connect, keeping track of which node each variable holds: one line per node with inputs,
+each input with the variable it is read from, or no variable when none holds it. Format:
+EDGES
+<id> <- <variable>=<node> arg<k>; <node> arg<k> ...
+---USER---
+Code:
+```python
+{numbered_code}
+```
+
+Nodes:
+{step1_nodes}

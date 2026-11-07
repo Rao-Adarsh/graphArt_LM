@@ -1,0 +1,11 @@
+{
+  "backend": "hf",
+  "model": "qwen2.5-coder-1.5b-graphart-lora-two-step",
+  "prompt": "two_step_brief",
+  "split": "torchvision",
+  "effort": "high",
+  "n": 21,
+  "cached": 0,
+  "failed": 0,
+  "joined": 18
+}

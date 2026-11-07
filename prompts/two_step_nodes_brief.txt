@@ -1,0 +1,11 @@
+Without running it, list the nodes of this PyTorch module's forward pass as torch.fx would
+trace it, each with the source lines that make it, outermost call first. The edges are
+asked for separately. Format:
+INPUTS <n>
+NODES
+<id> <op> <target> [<Class>(<params>)] [<shape>]  @<line>><line>...
+---USER---
+Code:
+```python
+{numbered_code}
+```

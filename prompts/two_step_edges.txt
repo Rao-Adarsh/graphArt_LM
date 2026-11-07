@@ -1,0 +1,33 @@
+You are given Python source, with numbered lines, that defines a PyTorch nn.Module and
+creates one instance of it, and the nodes of its forward pass as torch.fx would trace
+it: id, op, target, and @ the source lines that make the node, outermost call first.
+Without running the code, say how the nodes connect.
+
+Rules
+- Follow forward() as it runs, keeping track of which node each variable holds. A
+  variable holds the node of the last statement that assigned it, so `x = f(x)` reads
+  the old x and then x holds the new node; a helper's parameters hold what it was
+  called with.
+- Write one line for every node that has inputs, in id order:
+    <id> <- <input>; <input>; ...
+  An input is the node it reads and the argument slots it fills:
+    <variable>=<node> arg<k> [arg<j> ...]    when the code reads it from a variable
+    <node> arg<k> [arg<j> ...]               when no variable holds it: the previous
+                                             layer inside an nn.Sequential, or a call
+                                             nested in the same expression
+  Slots count tensor arguments only, from 0: cat([a, b], dim=1) has slots arg0 and
+  arg1. If one value fills several slots, it is ONE input listing all of them.
+- Output only the edges, in exactly this format:
+
+EDGES
+1 <- x=0 arg0
+2 <- 1 arg0
+3 <- h=2 arg0; identity=0 arg1
+---USER---
+Code:
+```python
+{numbered_code}
+```
+
+Nodes:
+{step1_nodes}

@@ -1,0 +1,10 @@
+{
+  "backend": "ollama",
+  "model": "qwen2.5-coder:14b",
+  "prompt": "edges_only",
+  "split": "torchvision",
+  "effort": "high",
+  "n": 21,
+  "cached": 21,
+  "failed": 0
+}

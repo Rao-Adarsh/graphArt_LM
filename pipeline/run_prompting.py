@@ -47,6 +47,14 @@ def _render(template: str, row: dict) -> str:
     text = template.replace("{code}", row["code"].strip())
     if "{nodes}" in text:
         text = text.replace("{nodes}", row["target"].split("EDGES")[0].strip())
+    # The two-step prompts (graphart/two_step.py). Not stripped: the line numbers must
+    # be those of the source exactly as it was traced. `step1` is the reference step-1
+    # answer when training and the model's own step-1 reply when evaluating.
+    if "{numbered_code}" in text or "{step1_nodes}" in text:
+        from graphart import two_step
+        text = text.replace("{numbered_code}", two_step.numbered(row["code"]))
+        if "{step1_nodes}" in text:
+            text = text.replace("{step1_nodes}", two_step.step2_input(row["step1"]))
     return text
 
 
@@ -83,6 +91,8 @@ def main() -> None:
                     help="hosted models only; part of the experimental condition")
     ap.add_argument("--max-tokens", type=int, default=None,
                     help="override the backend's own default output cap")
+    ap.add_argument("--num-ctx", type=int, default=None,
+                    help="Ollama only: context window; prompt + reply must fit in it")
     ap.add_argument("--split", default="test",
                     help="train, val, test, or any evaluation set in data/generated/<name>.jsonl "
                          "(torchvision, edits, ...)")
@@ -130,6 +140,8 @@ def main() -> None:
 
     try:
         extra = {} if args.max_tokens is None else {"max_tokens": args.max_tokens}
+        if args.num_ctx is not None:
+            extra["num_ctx"] = args.num_ctx
         backend = None if args.cached_only else make_backend(
             args.backend, args.model, effort=args.effort, **extra)
     except BackendError as exc:

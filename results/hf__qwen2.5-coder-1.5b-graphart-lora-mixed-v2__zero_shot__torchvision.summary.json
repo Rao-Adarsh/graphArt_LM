@@ -1,0 +1,68 @@
+{
+  "results": "hf__qwen2.5-coder-1.5b-graphart-lora-mixed-v2__zero_shot__torchvision.jsonl",
+  "mode": "full",
+  "overall": {
+    "parsed": 1.0,
+    "valid": 0.524,
+    "exact": 0.238,
+    "exact_topo": 0.286,
+    "node_f1": 0.857,
+    "edge_f1": 0.709,
+    "reach_f1": 0.781,
+    "n": 21
+  },
+  "by_tier": {
+    "tier 5": {
+      "parsed": 1.0,
+      "valid": 0.5,
+      "exact": 0.278,
+      "exact_topo": 0.333,
+      "node_f1": 0.86,
+      "edge_f1": 0.704,
+      "reach_f1": 0.781,
+      "n": 18
+    },
+    "tier 6": {
+      "parsed": 1.0,
+      "valid": 0.667,
+      "exact": 0.0,
+      "exact_topo": 0.0,
+      "node_f1": 0.838,
+      "edge_f1": 0.737,
+      "reach_f1": 0.781,
+      "n": 3
+    }
+  },
+  "by_size": {
+    "9-15": {
+      "parsed": 1.0,
+      "valid": 0.889,
+      "exact": 0.556,
+      "exact_topo": 0.667,
+      "node_f1": 0.782,
+      "edge_f1": 0.704,
+      "reach_f1": 0.846,
+      "n": 9
+    },
+    "16-25": {
+      "parsed": 1.0,
+      "valid": 0.143,
+      "exact": 0.0,
+      "exact_topo": 0.0,
+      "node_f1": 0.93,
+      "edge_f1": 0.701,
+      "reach_f1": 0.792,
+      "n": 7
+    },
+    "26+": {
+      "parsed": 1.0,
+      "valid": 0.4,
+      "exact": 0.0,
+      "exact_topo": 0.0,
+      "node_f1": 0.887,
+      "edge_f1": 0.729,
+      "reach_f1": 0.646,
+      "n": 5
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "backend": "ollama",
+  "model": "qwen2.5-coder:14b",
+  "prompt": "nodes_only_stack_few_shot",
+  "split": "torchvision",
+  "effort": "high",
+  "n": 21,
+  "cached": 21,
+  "failed": 0
+}

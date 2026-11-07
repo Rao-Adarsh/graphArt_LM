@@ -1,0 +1,22 @@
+id,category,detail
+tv-resnet-basicblock,exact,
+tv-resnet-basicblock-down,wrong_ops,missing: call_module/downsample.0/Conv2d; call_module/downsample.1/BatchNorm2d | extra: -
+tv-resnet-bottleneck,notation,
+tv-squeezenet-fire,exact,
+tv-googlenet-inception,exact,
+tv-inceptionv3-a,exact,
+tv-inceptionv3-b,wrong_ops,missing: call_module/branch3x3.conv/Conv2d; call_module/branch3x3.bn/BatchNorm2d; call_module/branch3x3dbl_1.conv/Conv2d; call_module/branch3x3dbl_1.bn/BatchNorm2d; call_module/branch3x3dbl_2.conv/Conv2d; call_module/branch3x3dbl_2.bn/BatchNorm2d | extra: call_module/branch3x3/Conv2d; call_module/branch3x3_bn/BatchNorm2d; call_module/branch3x3dbl_1/Conv2d; call_module/branch3x3dbl_1_bn/BatchNorm2d; call_module/branch3x3dbl_2/Conv2d; call_module/branch3x3dbl_2_bn/BatchNorm2d
+tv-inceptionv3-c,unparseable,"line 4: cannot parse '1 call_module _forward branch1x1 Conv2d(in=768,out=192,k=1,s=1,p=0) [1,192,17,17]'"
+tv-shufflenet-unit,wrong_ops,missing: call/chunk; call/getitem x2 | extra: call_module/branch1.0/Conv2d; call_module/branch1.1/BatchNorm2d; call_module/branch1.2/Conv2d; call_module/branch1.3/BatchNorm2d; call/relu
+tv-shufflenet-unit-down,miswired,
+tv-vit-encoderblock,wrong_ops,missing: call_module/mlp.2/Dropout; call_module/mlp.3/Linear; call_module/mlp.4/Dropout | extra: call_module/mlp.2/Linear
+tv-inceptionv3-d,unparseable,"line 4: cannot parse '1 call_module _forward branch3x3_1.conv Conv2d(in=768,out=192,k=1,s=1,p=0) [1,192,17,17]'"
+tv-inceptionv3-e,unparseable,"line 4: cannot parse '1 call_module _forward.1 branch1x1.conv Conv2d(in=1280,out=320,k=1,s=1,p=0) [1,320,8,8]'"
+tv-inceptionv3-aux,wrong_ops,missing: call/avg_pool2d | extra: call_module/avg_pool2d/AvgPool2d
+tv-googlenet-aux,wrong_ops,missing: call/adaptive_avg_pool2d; call_module/conv.conv/Conv2d; call_module/conv.bn/BatchNorm2d; call/relu | extra: call_module/conv/Conv2d
+tv-mnasnet-residual,wrong_ops,missing: call/add | extra: -
+tv-mnasnet-down,exact,
+tv-mobilenetv2-residual,wrong_ops,missing: call_module/conv.0.1/BatchNorm2d; call_module/conv.1.1/BatchNorm2d; call_module/conv.3/BatchNorm2d | extra: call_module/conv.0.2/BatchNorm2d; call_module/conv.1.2/BatchNorm2d
+tv-alexnet,notation,
+tv-squeezenet1_1,wrong_ops,missing: call/relu x3; call/cat; call_module/features.11.squeeze/Conv2d; call_module/features.11.expand1x1/Conv2d; call_module/features.11.expand3x3/Conv2d | extra: call_module/features.11/MaxPool2d
+tv-resnet18,wrong_ops,missing: - | extra: call/relu x8; call_module/layer1.0.downsample.0/Conv2d; call_module/layer1.0.downsample.1/BatchNorm2d

@@ -1,0 +1,22 @@
+id,category,detail
+tv-resnet-basicblock,exact,
+tv-resnet-basicblock-down,exact,
+tv-resnet-bottleneck,wrong_ops,missing: - | extra: call_module/downsample.0/Conv2d; call_module/downsample.1/BatchNorm2d
+tv-squeezenet-fire,exact,
+tv-googlenet-inception,miswired,
+tv-inceptionv3-a,miswired,
+tv-inceptionv3-b,miswired,
+tv-inceptionv3-c,miswired,
+tv-shufflenet-unit,miswired,
+tv-shufflenet-unit-down,wrong_ops,missing: call_module/branch1.0/Conv2d; call_module/branch1.1/BatchNorm2d; call_module/branch1.2/Conv2d; call_module/branch1.3/BatchNorm2d; call/relu | extra: call/chunk; call/getitem x2
+tv-vit-encoderblock,wrong_ops,missing: call/dim; call/operator.eq; call/builtins.getattr; call/_assert; call_module/mlp.3/Linear; call_module/mlp.4/Dropout | extra: -
+tv-inceptionv3-d,miswired,
+tv-inceptionv3-e,miswired,
+tv-inceptionv3-aux,spelling,
+tv-googlenet-aux,wrong_ops,missing: call/adaptive_avg_pool2d; call_module/conv.conv/Conv2d; call_module/conv.bn/BatchNorm2d; call/relu x2; call/flatten; call_module/fc1/Linear | extra: call/size; call/getitem x4; call/operator.eq x168; call/builtins.getattr; call/operator.floordiv x168; call/operator.mod x168
+tv-mnasnet-residual,exact,
+tv-mnasnet-down,exact,
+tv-mobilenetv2-residual,notation,
+tv-alexnet,miswired,
+tv-squeezenet1_1,wrong_ops,missing: call/relu x6; call/cat x2; call_module/features.7.squeeze/Conv2d; call_module/features.7.expand1x1/Conv2d; call_module/features.7.expand3x3/Conv2d; call_module/features.8/MaxPool2d | extra: call_module/features.7/MaxPool2d; call_module/features.8.squeeze/Conv2d; call_module/features.8.expand1x1/Conv2d; call_module/features.8.expand3x3/Conv2d; call_module/features.10/MaxPool2d
+tv-resnet18,wrong_ops,missing: - | extra: call/relu x2; call_module/layer1.0.downsample.0/Conv2d; call_module/layer1.0.downsample.1/BatchNorm2d; call/add; call_module/layer1.1.downsample.0/Conv2d; call_module/layer1.1.downsample.1/BatchNorm2d

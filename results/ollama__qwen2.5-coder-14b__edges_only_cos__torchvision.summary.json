@@ -1,0 +1,68 @@
+{
+  "results": "ollama__qwen2.5-coder-14b__edges_only_cos__torchvision.jsonl",
+  "mode": "edges",
+  "overall": {
+    "parsed": 1.0,
+    "valid": 0.667,
+    "exact": 0.667,
+    "exact_topo": 0.667,
+    "node_f1": 1.0,
+    "edge_f1": 0.934,
+    "reach_f1": 0.966,
+    "n": 21
+  },
+  "by_tier": {
+    "tier 5": {
+      "parsed": 1.0,
+      "valid": 0.722,
+      "exact": 0.722,
+      "exact_topo": 0.722,
+      "node_f1": 1.0,
+      "edge_f1": 0.948,
+      "reach_f1": 0.965,
+      "n": 18
+    },
+    "tier 6": {
+      "parsed": 1.0,
+      "valid": 0.333,
+      "exact": 0.333,
+      "exact_topo": 0.333,
+      "node_f1": 1.0,
+      "edge_f1": 0.848,
+      "reach_f1": 0.973,
+      "n": 3
+    }
+  },
+  "by_size": {
+    "9-15": {
+      "parsed": 1.0,
+      "valid": 0.889,
+      "exact": 0.889,
+      "exact_topo": 0.889,
+      "node_f1": 1.0,
+      "edge_f1": 0.994,
+      "reach_f1": 0.989,
+      "n": 9
+    },
+    "16-25": {
+      "parsed": 1.0,
+      "valid": 0.714,
+      "exact": 0.714,
+      "exact_topo": 0.714,
+      "node_f1": 1.0,
+      "edge_f1": 0.925,
+      "reach_f1": 0.959,
+      "n": 7
+    },
+    "26+": {
+      "parsed": 1.0,
+      "valid": 0.2,
+      "exact": 0.2,
+      "exact_topo": 0.2,
+      "node_f1": 1.0,
+      "edge_f1": 0.838,
+      "reach_f1": 0.936,
+      "n": 5
+    }
+  }
+}

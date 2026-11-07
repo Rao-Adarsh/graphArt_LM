@@ -46,7 +46,10 @@ from pipeline.run_prompting import load_split
 OUT_DIR = ROOT / "notebooks"
 STRATIFY = 10
 CODE_FILES = ["pipeline/__init__.py", "pipeline/backends.py", "pipeline/cost.py",
-              "pipeline/run_prompting.py"]
+              "pipeline/run_prompting.py",
+              # the runner numbers the code for the stack and two-step prompts with these
+              # (text only, no torch)
+              "graphart/__init__.py", "graphart/schema.py", "graphart/two_step.py"]
 SAMPLE_FIELDS = ("id", "tier", "num_nodes", "code", "target")
 # The closing evaluation sets (RQ4, RQ5), built by build_torchvision_set.py and
 # build_edit_set.py; bundled whenever they exist. torchvision_holdout is frozen (see
@@ -55,6 +58,10 @@ EVAL_SETS = ("torchvision", "edits", "rq6", "large_test", "torchvision_holdout")
 # The library-style training set (build_large_dataset.py), bundled with train/val for
 # fine-tuning whenever it exists; select it with TRAIN_ARGS --train-split/--val-split.
 LARGE_TRAIN_SETS = ("large_train", "large_val")
+# The two-step format (graphart/two_step.py): its reader, its evaluator, and the training
+# data scripts/build_two_step.py writes.
+TWO_STEP_CODE = ("graphart/__init__.py", "graphart/schema.py", "graphart/two_step.py", "pipeline/run_two_step.py")
+TWO_STEP_TRAIN_SETS = ("train", "val", "large_train", "large_val")
 
 
 def _add(tar: tarfile.TarFile, name: str, data: bytes) -> None:
@@ -63,12 +70,13 @@ def _add(tar: tarfile.TarFile, name: str, data: bytes) -> None:
     tar.addfile(info, io.BytesIO(data))
 
 
-def payload(finetune: bool = False) -> tuple[dict[str, bytes], int]:
+def payload(finetune: bool = False, two_step: bool = False) -> tuple[dict[str, bytes], int]:
     """Every file the runner needs on Kaggle, by repo-relative path, and the sample count.
 
     For fine-tuning it also carries the trainer and the full train and val splits
     (with their edges -- they are the training targets). The test samples stay
-    stripped either way.
+    stripped either way. `two_step` carries the two-step training data
+    (data/generated/two_step/) and its reader and evaluator instead of the plain splits.
     """
     # The whole test split, in split order, so `--stratify 10` still picks exactly the
     # 40 every other run used -- plus the closing evaluation sets that exist. The
@@ -86,6 +94,14 @@ def payload(finetune: bool = False) -> tuple[dict[str, bytes], int]:
             json.dumps({**{k: r[k] for k in SAMPLE_FIELDS},
                         "target": r["target"].split("EDGES")[0].strip()}) + "\n" for r in rows_).encode("utf-8")
     rows = load_split("test", None, None, STRATIFY)
+    if two_step:
+        files["scripts/train_lora.py"] = (ROOT / "scripts" / "train_lora.py").read_bytes()
+        for rel in TWO_STEP_CODE:
+            files[rel] = (ROOT / rel).read_bytes()
+        for split in TWO_STEP_TRAIN_SETS:
+            files[f"data/generated/two_step/{split}.jsonl"] = (ROOT / "data" / "generated" / "two_step" /
+                                                               f"{split}.jsonl").read_bytes()
+        return files, len(rows)
     if finetune:
         files["scripts/train_lora.py"] = (ROOT / "scripts" / "train_lora.py").read_bytes()
         for split in ("train", "val", *LARGE_TRAIN_SETS):
@@ -128,10 +144,10 @@ LONG_PROMPTS, LONG_SETS = ("cot", "cos"), ("torchvision", "torchvision_holdout")
 
 
 def job(model: str, prompt: str, split: str = "test", stratify: int | None = STRATIFY,
-        max_tokens: int | None = None) -> dict:
+        max_tokens: int | None = None, num_ctx: int | None = None) -> dict:
     long = prompt in LONG_PROMPTS or split in LONG_SETS
     return {"model": model, "prompt": prompt, "split": split, "stratify": stratify,
-            "max_tokens": max_tokens or (4096 if long else None)}
+            "max_tokens": max_tokens or (4096 if long else None), "num_ctx": num_ctx}
 
 
 def config(jobs: list[dict], hours: float = 11.0) -> str:
@@ -249,6 +265,8 @@ for j in ([] if SMOKE_ONLY else JOBS):
         cmd += ["--stratify", str(j["stratify"])]
     if j["max_tokens"]:
         cmd += ["--max-tokens", str(j["max_tokens"])]
+    if j.get("num_ctx"):
+        cmd += ["--num-ctx", str(j["num_ctx"])]
     if j.get("limit"):                      # for trying a notebook on a few samples
         cmd += ["--limit", str(j["limit"])]
     print(f"\\n##### {name}   ({remaining() / 3600:.1f} h left)", flush=True)
@@ -513,6 +531,30 @@ CLOSING_OLLAMA_JOBS = [
     job("qwen2.5-coder:14b", "zero_shot", "edits", None),
 ]
 
+# Which half of the two-step task is hard on real code: the 14B handed the true nodes
+# (edges_only), asked for the nodes alone (nodes_only), and with CoS, on torchvision 21.
+# Cheapest first. At ~16 tok/s: ~10 + ~20 min, then cos ~1 h (resnet18's CoS answer is
+# ~6k tokens). The cos prompt plus 2.2k of code plus that answer overflows Ollama's
+# 8192-token default context, which would silently drop the start of the prompt.
+PROBE_14B_JOBS = [
+    job("qwen2.5-coder:14b", "edges_only", "torchvision", None, 1500),   # longest edge list: 762
+    job("qwen2.5-coder:14b", "nodes_only", "torchvision", None, 3200),   # longest node list: 2194
+    job("qwen2.5-coder:14b", "cos", "torchvision", None, 8000, num_ctx=16384),
+]
+
+# The second probe (prompts from scripts/build_probe_prompts.py). First, CoS wiring given
+# the true nodes: does tracking variables help the 14B wire real code? Then three ways to
+# better nodes without fine-tuning, the 14B having listed helper classes as single boxes:
+# the @ source stack (zero-shot), two worked examples with helpers, and both. All on
+# torchvision 21, ~1.5 h at ~16 tok/s. The few-shot prompts run 3k tokens before the
+# code, so every job gets a 16k context.
+PROBE_14B_NODES_JOBS = [
+    job("qwen2.5-coder:14b", "edges_only_cos", "torchvision", None, 6000, num_ctx=16384),
+    job("qwen2.5-coder:14b", "nodes_only_stack", "torchvision", None, 4000, num_ctx=16384),
+    job("qwen2.5-coder:14b", "nodes_only_few_shot", "torchvision", None, 3200, num_ctx=16384),
+    job("qwen2.5-coder:14b", "nodes_only_stack_few_shot", "torchvision", None, 4000, num_ctx=16384),
+]
+
 # ~2.1 h measured (1.5B at ~24 tok/s, ~32 s per training step on a T4).
 CLOSING_HF_CONFIG = (
     'BASE_MODEL = "Qwen/Qwen2.5-Coder-1.5B-Instruct"; FULL_ADAPTER = "qwen2.5-coder-1.5b-graphart-lora"; '
@@ -708,12 +750,15 @@ Generated by `scripts/make_kaggle_notebook.py --finetune-large`. Edit that scrip
 """
 
 
-def finetune_large_cells(b64: str, digest: str) -> list[tuple[str, str]]:
+def finetune_large_cells(b64: str, digest: str, zip_name: str = "graphart_finetune_mixed.zip",
+                         runner: str = "pipeline.run_prompting",
+                         prompt_args: str = '"--prompt", "zero_shot"') -> list[tuple[str, str]]:
     unpack, install, download = finetune_cells(b64, digest)[:3]
     return [unpack, install, download, ("4. Check the data, then the GPU memory", """
 import zipfile
 
 GPU_ENV = dict(os.environ, CUDA_VISIBLE_DEVICES="0", HF_HUB_OFFLINE="1", PYTHONUNBUFFERED="1")
+ZIP_NAME = "__ZIP_NAME__"
 
 def remaining():
     return TIME_BUDGET_HOURS * 3600 - (time.time() - START)
@@ -723,7 +768,7 @@ def train(*extra):
                            *TRAIN_ARGS, *extra], env=GPU_ENV).returncode
 
 def package():
-    with zipfile.ZipFile(WORK / "graphart_finetune_mixed.zip", "w", zipfile.ZIP_DEFLATED) as z:
+    with zipfile.ZipFile(WORK / ZIP_NAME, "w", zipfile.ZIP_DEFLATED) as z:
         for root in (REPO / "results", REPO / "lora" / ADAPTER):
             for p in root.rglob("*") if root.exists() else []:
                 if p.is_file() and "checkpoints" not in p.parts:
@@ -743,7 +788,7 @@ if code == 5:                                 # train_lora.py: out of memory
     code = train("--out", "lora/check", "--memory-check", str(MEMORY_CHECK))
 if code != 0:
     raise SystemExit(f"the memory check failed (exit {code}) -- see the log above")
-"""), ("5. Smoke run: is it learning?", """
+""".replace("__ZIP_NAME__", zip_name)), ("5. Smoke run: is it learning?", """
 code = train("--out", "lora/smoke", "--smoke-steps", str(SMOKE_STEPS))
 if code in (3, 4):                            # not learning / NaN: maybe fp16, retry in fp32
     print(f"smoke run failed in fp16 (exit {code}) -- retrying in fp32", flush=True)
@@ -765,8 +810,8 @@ for split, cap in EVALS:
     if remaining() < 600:
         print(f"time budget spent -- skipping {split}")
         continue
-    cmd = [sys.executable, "-m", "pipeline.run_prompting", "--backend", "hf", "--model", str(adapter),
-           "--prompt", "zero_shot", "--split", split, *(["--max-tokens", str(cap)] if cap else []),
+    cmd = [sys.executable, "-m", "__RUNNER__", "--backend", "hf", "--model", str(adapter),
+           __PROMPT_ARGS__, "--split", split, *(["--max-tokens", str(cap)] if cap else []),
            *(["--stratify", "10"] if split == "test" else []), *EVAL_ARGS]
     print(f"\\n##### {split}   ({remaining() / 3600:.1f} h left)", flush=True)
     try:
@@ -777,8 +822,108 @@ for split, cap in EVALS:
 for meta in sorted((REPO / "results").glob("*.meta.json")):
     m = json.loads(meta.read_text())
     print(f"{meta.stem:75s} n={m['n']} failed={m['failed']}")
-print(f"done in {(time.time() - START) / 3600:.1f} h -- download graphart_finetune_mixed.zip")
-""")]
+print(f"done in {(time.time() - START) / 3600:.1f} h -- download {ZIP_NAME}")
+""".replace("__RUNNER__", runner).replace("__PROMPT_ARGS__", prompt_args))]
+
+
+# ---------------------------------------------------------------------------
+# Fork B: the two-step format (graphart/two_step.py) -- nodes with their source lines,
+# then edges with the variables they are read from -- on a fresh 1.5B LoRA.
+
+# Both budget cuts: the brief prompts (no rules), every second tier 1-4 program, half the
+# val programs. 2560 examples averaging 1378 tokens: 3.5M, a little under Session 2's
+# 3.7M, which trained in 96 min. Scoring is two calls per program.
+FINETUNE_TWO_STEP_CONFIG = (
+    'BASE_MODEL = "Qwen/Qwen2.5-Coder-1.5B-Instruct"; ADAPTER = "qwen2.5-coder-1.5b-graphart-lora-two-step"; '
+    'EPOCHS = 1.0; TRAIN_ARGS = ["--two-step", "--train-split", "train/2,large_train", '
+    '"--val-split", "val/2,large_val/2", "--max-len", "8192", "--eval-steps", "40"]; FALLBACK_MAX_LEN = 6144; '
+    'MEMORY_CHECK = 6; SMOKE_STEPS = 8; EVALS = [("test", 3000), ("torchvision", 4500)]; '
+    'EVAL_RESERVE_HOURS = 0.8; TIME_BUDGET_HOURS = 2.5; EVAL_ARGS = []; VALIDATE_ONLY = False')
+
+FINETUNE_TWO_STEP_NOTES = """
+# BASE_MODEL   tuned from scratch (a fresh LoRA), like Sessions 1 and 2.
+# ADAPTER      its name; results land in results/hf__<ADAPTER>__two_step_brief*.jsonl.
+# TRAIN_ARGS   --two-step: two examples per program (nodes, then edges), with the brief
+#              prompts. train/2 is every second tier 1-4 program; all of tiers 5-6; half
+#              the val programs. The longest example is 6224 tokens.
+# FALLBACK_MAX_LEN  if the longest examples do not fit in GPU memory, train with this
+#              --max-len instead and leave out the few longer examples.
+# MEMORY_CHECK forward + backward on this many of the longest examples, before anything else.
+# EVALS        (data set, reply cap per call) scored after training, each program in two
+#              calls: the 40 stratified test programs and the 21 torchvision samples.
+# EVAL_RESERVE_HOURS  kept back from training for EVALS.
+# VALIDATE_ONLY True: only check the code arrived intact (works on a CPU session).
+"""
+
+FINETUNE_TWO_STEP_INTRO = """
+# graphArt_LM: the two-step model (fork B)
+
+Fine-tunes `Qwen2.5-Coder-1.5B-Instruct` with a fresh LoRA to answer in two steps: first
+the nodes, each with the source lines that make it; then, given those nodes, the edges,
+each input with the variable it is read from. The training answers were recorded from
+the fx trace itself (`graphart/cos_trace.py`), not written by hand.
+
+Then scores it on the same 40 test programs and the 21 torchvision samples, step 2
+always given the model's own step-1 nodes. About 2.3 hours, capped at 2.5.
+
+**Before running**: *GPU T4 x2* (one is used), *Internet on*. No inputs needed. Then
+*Save Version -> Save & Run All (Commit)*.
+
+**When it finishes**, download `graphart_finetune_two_step.zip` from the *Output* tab:
+the results and the adapter.
+
+Generated by `scripts/make_kaggle_notebook.py --finetune-two-step`. Edit that script, not this file.
+"""
+
+
+# The same with the full-rules prompts: the brief-prompt adapter wrote a method name,
+# `_forward`, into module paths on three Inception-v3 samples, and the rule that a target
+# is the attribute path was one of those left out. The rules cost ~1200 tokens a
+# program, so tiers 1-4 drop to every eighth program (40 a tier): 1600 examples
+# averaging 2344 tokens, 3.75M -- the last run trained 3.62M in 96 min.
+FINETUNE_TWO_STEP_FULL_CONFIG = (
+    'BASE_MODEL = "Qwen/Qwen2.5-Coder-1.5B-Instruct"; ADAPTER = "qwen2.5-coder-1.5b-graphart-lora-two-step-full"; '
+    'EPOCHS = 1.0; TRAIN_ARGS = ["--two-step", "--full-prompts", "--train-split", "train/8,large_train", '
+    '"--val-split", "val/8,large_val/2", "--max-len", "8192", "--eval-steps", "40"]; FALLBACK_MAX_LEN = 6144; '
+    'MEMORY_CHECK = 6; SMOKE_STEPS = 8; EVALS = [("test", 3000), ("torchvision", 4500)]; '
+    'EVAL_RESERVE_HOURS = 0.8; TIME_BUDGET_HOURS = 2.5; EVAL_ARGS = []; VALIDATE_ONLY = False')
+
+FINETUNE_TWO_STEP_FULL_NOTES = """
+# BASE_MODEL   tuned from scratch (a fresh LoRA), like every earlier session.
+# ADAPTER      its name; results land in results/hf__<ADAPTER>__two_step*.jsonl.
+# TRAIN_ARGS   --two-step --full-prompts: two examples per program (nodes, then edges),
+#              with the full-rules prompts. train/8 is every eighth tier 1-4 program (40 a
+#              tier); all of tiers 5-6; val/8 and half of large_val. Longest example 7022.
+# FALLBACK_MAX_LEN  if the longest examples do not fit in GPU memory, train with this
+#              --max-len instead and leave out the few longer examples.
+# MEMORY_CHECK forward + backward on this many of the longest examples, before anything else.
+# EVALS        (data set, reply cap per call), each program in two calls with the same
+#              full prompts: the 40 stratified test programs and the 21 torchvision samples.
+# EVAL_RESERVE_HOURS  kept back from training for EVALS; training ~100 min, and the time
+#              guard stops it early (keeping the best checkpoint) if it would eat into this.
+# VALIDATE_ONLY True: only check the code arrived intact (works on a CPU session).
+"""
+
+FINETUNE_TWO_STEP_FULL_INTRO = """
+# graphArt_LM: the two-step model with the full-rules prompts
+
+Fine-tunes `Qwen2.5-Coder-1.5B-Instruct` with a fresh LoRA on the two-step format (nodes
+with their source lines, then edges with the variables they are read from), like the last
+run, but with the full-rules prompts: the brief ones left out the rule that a target is the
+attribute path, and the last adapter wrote `_forward` into module paths. To pay for the
+rules, tiers 1-4 are cut to every eighth program.
+
+Then scores it on the same 40 test programs and the 21 torchvision samples, step 2 always
+given the model's own step-1 nodes. About 2.4 hours, capped at 2.5.
+
+**Before running**: *GPU T4 x2* (one is used), *Internet on*. No inputs needed. Then
+*Save Version -> Save & Run All (Commit)*.
+
+**When it finishes**, download `graphart_finetune_two_step_full.zip` from the *Output* tab:
+the results and the adapter.
+
+Generated by `scripts/make_kaggle_notebook.py --finetune-two-step-full`. Edit that script, not this file.
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -836,14 +981,23 @@ def package():
             if p.is_file():
                 z.write(p, p.relative_to(REPO))
 
+# os.walk with followlinks: Kaggle may mount inputs through links, which Path.rglob does
+# not descend into on Python 3.13.
+found = [Path(d) / "adapter_config.json" for d, _, files in os.walk(INPUT, followlinks=True)
+         if "adapter_config.json" in files] if INPUT.exists() else []
 adapter = None
-for cfg in INPUT.rglob("adapter_config.json") if INPUT.exists() else []:
+for cfg in found:
     if json.loads(cfg.read_text()).get("base_model_name_or_path") == BASE_MODEL \\
             and (cfg.parent / "adapter_model.safetensors").exists():
         adapter = REPO / "lora" / cfg.parent.name
         shutil.copytree(cfg.parent, adapter, dirs_exist_ok=True)
         break
 if adapter is None:
+    # Say what is there, so a wrong upload is visible in the log rather than guessed at.
+    print(f"adapter_config.json files found: {[str(c) for c in found]}")
+    for d, dirs, files in os.walk(INPUT, followlinks=True):
+        if d.count(os.sep) - str(INPUT).count(os.sep) <= 3:
+            print(f"  {d}: {sorted(dirs)[:10]} {sorted(files)[:10]}")
     raise SystemExit("no adapter for this base under /kaggle/input -- add it as an input (see the top)")
 print(f"using the adapter {adapter.name}", flush=True)
 """), ("5. Run the jobs", """
@@ -867,6 +1021,72 @@ print(f"done in {(time.time() - START) / 3600:.1f} h -- download graphart_hf_eva
 """)]
 
 
+# ---------------------------------------------------------------------------
+# Evaluation only, the uploaded (brief-prompt) two-step adapter: step 2 handed mixed-v2's
+# node lists instead of its own step 1 -- how many graphs step 2 delivers from good nodes,
+# and so how much a better step 1 is worth.
+
+# Bundled under data/, not results/: bundle files carry mtime 0, which zipfile refuses
+# when the results are packaged -- and the input is not a result of this run anyway.
+MIXED_V2_TV = "results/hf__qwen2.5-coder-1.5b-graphart-lora-mixed-v2__zero_shot__torchvision.jsonl"
+MIXED_V2_TV_BUNDLED = "data/step1_given/hf__qwen2.5-coder-1.5b-graphart-lora-mixed-v2__zero_shot__torchvision.jsonl"
+
+# Step 2 alone is ~600 tokens a program at ~24 tok/s: ~10 min, ~25 with the setup.
+TWO_STEP_EVAL_CONFIG = (
+    'BASE_MODEL = "Qwen/Qwen2.5-Coder-1.5B-Instruct"; '
+    f'JOBS = [(["--brief", "--step1-from", "{MIXED_V2_TV_BUNDLED}"], "torchvision", 3000)]; '
+    'TIME_BUDGET_HOURS = 1.0; EVAL_ARGS = []; VALIDATE_ONLY = False')
+
+TWO_STEP_EVAL_NOTES = """
+# BASE_MODEL   the base the uploaded adapter was trained on (read from its adapter_config.json).
+# JOBS         (run_two_step.py flags, data set, reply cap per call): step 2 given mixed-v2's
+#              node lists, with the brief prompt the adapter was trained on.
+# TIME_BUDGET  the whole session; a job that would not fit is skipped, one in progress keeps
+#              every reply finished so far (replies are cached one by one).
+# EVAL_ARGS    extra flags for run_two_step.py, e.g. ["--limit", "2"] for a quick try.
+# VALIDATE_ONLY True: only check the code arrived intact (works on a CPU session).
+"""
+
+TWO_STEP_EVAL_INTRO = """
+# graphArt_LM: the two-step 1.5B's step 2, given mixed-v2's nodes (evaluation only)
+
+Runs step 2 of the two-step adapter (`qwen2.5-coder-1.5b-graphart-lora-two-step`) on the
+21 torchvision samples, handed the one-step mixed-v2 model's node lists instead of its own
+step 1. No training. About 25 minutes of one T4, capped at 1 hour.
+
+**Before running**: *GPU T4 x2*, *Internet on*, and add the adapter folder
+`qwen2.5-coder-1.5b-graphart-lora-two-step` as an input (*Add Input* -> *Upload* ->
+`dist/qwen2.5-coder-1.5b-graphart-lora-two-step.zip`). Then
+*Save Version -> Save & Run All (Commit)*.
+
+**When it finishes**, download `graphart_hf_eval.zip` from the *Output* tab.
+
+Generated by `scripts/make_kaggle_notebook.py --two-step-eval`. Edit that script, not this file.
+"""
+
+
+def two_step_eval_cells(b64: str, digest: str) -> list[tuple[str, str]]:
+    return hf_eval_cells(b64, digest)[:4] + [("5. Run the jobs", """
+for flags, split, cap in JOBS:
+    if remaining() < 600:
+        print(f"time budget spent -- skipping {flags} on {split}")
+        continue
+    cmd = [sys.executable, "-m", "pipeline.run_two_step", "--backend", "hf", "--model", str(adapter),
+           *flags, "--split", split, "--max-tokens", str(cap),
+           *(["--stratify", "10"] if split == "test" else []), *EVAL_ARGS]
+    print(f"\\n##### {flags} on {split}   ({remaining() / 3600:.1f} h left)", flush=True)
+    try:
+        subprocess.run(cmd, env=GPU_ENV, timeout=remaining())
+    except subprocess.TimeoutExpired:
+        print("stopped by the time budget -- the finished replies are kept")
+    package()
+for meta in sorted((REPO / "results").glob("*.meta.json")):
+    m = json.loads(meta.read_text())
+    print(f"{meta.stem:85s} n={m['n']} failed={m['failed']} joined={m.get('joined')}")
+print(f"done in {(time.time() - START) / 3600:.1f} h -- download graphart_hf_eval.zip")
+""")]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--models", nargs="+", default=DEFAULT_MODELS,
@@ -883,6 +1103,17 @@ def main() -> None:
                     help="build notebooks/kaggle_hf_eval.ipynb (the uploaded adapter on chosen jobs, no training)")
     ap.add_argument("--closing-ollama", action="store_true",
                     help="build notebooks/kaggle_closing_ollama.ipynb (RQ4-RQ5, prompted 14B and Gemma 31B)")
+    ap.add_argument("--finetune-two-step", action="store_true",
+                    help="build notebooks/kaggle_finetune_two_step.ipynb (fork B: the two-step 1.5B)")
+    ap.add_argument("--finetune-two-step-full", action="store_true",
+                    help="build notebooks/kaggle_finetune_two_step_full.ipynb (two-step, full-rules prompts)")
+    ap.add_argument("--two-step-eval", action="store_true",
+                    help="build notebooks/kaggle_two_step_eval.ipynb (the two-step adapter given mixed-v2's nodes, "
+                         "and re-prompted with the full rules; no training)")
+    ap.add_argument("--probe-14b-nodes", action="store_true",
+                    help="build notebooks/kaggle_probe_14b_nodes.ipynb (14B: CoS edges given nodes, better nodes)")
+    ap.add_argument("--probe-14b", action="store_true",
+                    help="build notebooks/kaggle_probe_14b.ipynb (14B edges_only, nodes_only, cos on torchvision)")
     args = ap.parse_args()
     unknown = [p for p in args.prompts if not (ROOT / "prompts" / f"{p}.txt").exists()]
     if unknown:
@@ -909,6 +1140,42 @@ def main() -> None:
         print(f"wrote {nb_path.relative_to(ROOT)} (bundle {len(b64) / 1024:.0f} KB, sha256 {digest[:12]})")
         return
 
+    if args.finetune_two_step:
+        files, n = payload(two_step=True)
+        b64, digest = bundle(files)
+        nb_path = OUT_DIR / "kaggle_finetune_two_step.ipynb"
+        cells = finetune_large_cells(b64, digest, zip_name="graphart_finetune_two_step.zip",
+                                     runner="pipeline.run_two_step", prompt_args='"--brief"')
+        nb = notebook(FINETUNE_TWO_STEP_CONFIG, cells, n,
+                      intro=FINETUNE_TWO_STEP_INTRO, notes=FINETUNE_TWO_STEP_NOTES)
+        nb_path.write_text(json.dumps(nb, indent=1) + "\n", encoding="utf-8")
+        print(f"wrote {nb_path.relative_to(ROOT)} (bundle {len(b64) / 1024:.0f} KB, sha256 {digest[:12]})")
+        return
+
+    if args.finetune_two_step_full:
+        files, n = payload(two_step=True)
+        b64, digest = bundle(files)
+        nb_path = OUT_DIR / "kaggle_finetune_two_step_full.ipynb"
+        cells = finetune_large_cells(b64, digest, zip_name="graphart_finetune_two_step_full.zip",
+                                     runner="pipeline.run_two_step", prompt_args="*[]")
+        nb = notebook(FINETUNE_TWO_STEP_FULL_CONFIG, cells, n,
+                      intro=FINETUNE_TWO_STEP_FULL_INTRO, notes=FINETUNE_TWO_STEP_FULL_NOTES)
+        nb_path.write_text(json.dumps(nb, indent=1) + "\n", encoding="utf-8")
+        print(f"wrote {nb_path.relative_to(ROOT)} (bundle {len(b64) / 1024:.0f} KB, sha256 {digest[:12]})")
+        return
+
+    if args.two_step_eval:
+        files, n = payload()
+        files["pipeline/run_two_step.py"] = (ROOT / "pipeline" / "run_two_step.py").read_bytes()
+        files[MIXED_V2_TV_BUNDLED] = (ROOT / MIXED_V2_TV).read_bytes()      # the node lists step 2 is handed
+        b64, digest = bundle(files)
+        nb_path = OUT_DIR / "kaggle_two_step_eval.ipynb"
+        nb = notebook(TWO_STEP_EVAL_CONFIG, two_step_eval_cells(b64, digest), n,
+                      intro=TWO_STEP_EVAL_INTRO, notes=TWO_STEP_EVAL_NOTES)
+        nb_path.write_text(json.dumps(nb, indent=1) + "\n", encoding="utf-8")
+        print(f"wrote {nb_path.relative_to(ROOT)} (bundle {len(b64) / 1024:.0f} KB, sha256 {digest[:12]})")
+        return
+
     if args.hf_eval:
         files, n = payload()
         b64, digest = bundle(files)
@@ -918,14 +1185,16 @@ def main() -> None:
         print(f"wrote {nb_path.relative_to(ROOT)} (bundle {len(b64) / 1024:.0f} KB, sha256 {digest[:12]})")
         return
 
-    if args.closing_ollama:
-        settings = config(CLOSING_OLLAMA_JOBS, hours=2.5)          # the user's cap
+    if args.closing_ollama or args.probe_14b or args.probe_14b_nodes:
+        jobs = PROBE_14B_NODES_JOBS if args.probe_14b_nodes else PROBE_14B_JOBS if args.probe_14b else CLOSING_OLLAMA_JOBS
+        settings = config(jobs, hours=2.5)          # the user's cap
         files, n = payload()
         b64, digest = bundle(files)
-        nb_path = OUT_DIR / "kaggle_closing_ollama.ipynb"
+        nb_path = OUT_DIR / ("kaggle_probe_14b_nodes.ipynb" if args.probe_14b_nodes else
+                             "kaggle_probe_14b.ipynb" if args.probe_14b else "kaggle_closing_ollama.ipynb")
         nb_path.write_text(json.dumps(notebook(settings, code_cells(b64, digest), n), indent=1) + "\n",
                            encoding="utf-8")
-        print(f"wrote {nb_path.relative_to(ROOT)} ({len(CLOSING_OLLAMA_JOBS)} jobs, "
+        print(f"wrote {nb_path.relative_to(ROOT)} ({len(jobs)} jobs, "
               f"bundle {len(b64) / 1024:.0f} KB, sha256 {digest[:12]})")
         return
 

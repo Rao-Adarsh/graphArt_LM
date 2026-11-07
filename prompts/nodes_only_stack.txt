@@ -1,0 +1,56 @@
+You are given Python source, with numbered lines, that defines a PyTorch nn.Module and
+creates one instance of it. Without running the code, list the nodes of its forward pass
+as torch.fx would trace it. The edges are asked for separately.
+
+Rules
+- One node per traced operation. The op is one of:
+    placeholder     an input to forward()
+    get_attr        a stored parameter or buffer read directly
+    call_module     a layer, e.g. nn.Linear or nn.Conv2d
+    call_function   a free function, e.g. add, cat, relu, gelu
+    call_method     a tensor method, e.g. view, mean, flatten
+    output          the value returned
+- A node line is:
+    <id> <op> <target> [<Class>(<params>)] [<shape>]  @<lines>
+  * <target> is the attribute path for call_module (fc1, blocks.0, layer1.0.conv1),
+    and the normalised function name otherwise (add, cat, relu, gelu, view).
+  * <Class>(<params>) appears for call_module only. Write exactly these parameters,
+    named this way, and no others; a layer with no parameters is the bare class name:
+      Linear(in=8,out=16,bias=True)        Conv2d(in=3,out=16,k=3,s=1,p=1)
+      BatchNorm2d(features=16)             LayerNorm(shape=[32])
+      MaxPool2d(k=2,s=2)                   AdaptiveAvgPool2d(out=1)
+      Flatten(start=1,end=-1)              Dropout(p=0.1)
+      Embedding(num=100,dim=16)            ReLU   GELU   SiLU   Sigmoid   Tanh
+    Every Conv/ConvTranspose takes in,out,k,s,p (and g only when groups is not 1),
+    never bias. BatchNorm and GroupNorm take features. MaxPool/AvgPool take k,s.
+    AdaptiveAvgPool/AdaptiveMaxPool take out. A layer not listed here, such as
+    MultiheadAttention or Upsample, is the bare class name. A list value is bracketed
+    and joined with x: k=[3x5].
+  * <shape> is that node's output shape in square brackets, e.g. [2,16].
+    The shape going in is given by example_input at the bottom of the source.
+  * @<lines> is where the node comes from: the numbers of the source lines being run
+    when it is made, outermost call first, joined with >. @64>56>16 means line 64
+    called something whose line 56 called something whose line 16 makes the node.
+    Only lines of this source count: when nn.Sequential runs its layers, that happens
+    inside PyTorch, so a layer of `x = self.features(x)` on line 50 is @50 (plus the
+    lines of its own forward, if it has one). The placeholder and output nodes have
+    no @.
+- Function names are normalised: `x + y`, torch.add(x, y) and x.add(y) are all `add`;
+  F.relu, torch.relu and x.relu() are all `relu`. An activation written as a layer
+  (nn.ReLU) stays a call_module node with its attribute path.
+- Ids start at 0 and follow the order the operations run in.
+- Unroll every loop. Expand nn.Sequential and nn.ModuleList into one node per layer,
+  with paths like blocks.0, blocks.1. Omit any branch that cannot run, such as an
+  `if` on an attribute that is False.
+- Output only the nodes, in exactly this format:
+
+INPUTS 1
+NODES
+0 placeholder x [1,8]
+1 call_module fc Linear(in=8,out=2,bias=True) [1,2]  @9
+2 output output [1,2]
+---USER---
+Code:
+```python
+{numbered_code}
+```

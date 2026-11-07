@@ -19,6 +19,19 @@ used alone:
 The adapter it saves is scored like any other model:
 
     python -m pipeline.run_prompting --backend hf --model lora/qwen2.5-coder-1.5b-graphart --prompt zero_shot --stratify 10
+
+`--two-step` trains the two-step format instead (graphart/two_step.py): every program
+in data/generated/two_step/<split>.jsonl (scripts/build_two_step.py) gives two
+examples, the `two_step_nodes_brief` prompt answered with its step 1 and the
+`two_step_edges_brief` prompt -- given the reference step 1 -- answered with its step
+2. The brief prompts leave out the rules: the examples teach the format, and the rules
+were 36% of the tokens. Score such an adapter with `pipeline/run_two_step.py --brief`.
+`--full-prompts` trains on the full-rules `two_step_nodes` / `two_step_edges` instead (the
+brief-prompt adapter wrote a method name, `_forward`, into module paths -- the rule that a
+target is the attribute path was one of those left out); score that one without --brief.
+
+A split written `train/2` takes every second program of it -- every second, not the
+first half, because the splits are stored in tier order.
 """
 
 import argparse
@@ -48,6 +61,8 @@ from pipeline.backends import HF_DEFAULT
 from pipeline.run_prompting import _render, load_prompt
 
 PROMPT = "zero_shot"
+TWO_STEP_PROMPTS = (("two_step_nodes_brief", "step1"), ("two_step_edges_brief", "step2"))
+TWO_STEP_FULL_PROMPTS = (("two_step_nodes", "step1"), ("two_step_edges", "step2"))
 IGNORE = -100                       # label value the loss skips
 
 # Exit codes the notebook acts on. Only these two are worth a retry in fp32; any
@@ -76,14 +91,16 @@ def has_dead_branch(row: dict) -> bool:
 CONSTRUCTS = {"dead_branch": has_dead_branch}
 
 
-def load_rows(split: str, limit: int | None, exclude: str | None = None) -> list[dict]:
+def load_rows(split: str, limit: int | None, exclude: str | None = None,
+              two_step: bool = False) -> list[dict]:
     """Rows of one split, or of several given comma-separated, in that order."""
     rows = []
     for name in split.split(","):
-        path = ROOT / "data" / "generated" / f"{name.strip()}.jsonl"
+        name, _, every = name.strip().partition("/")
+        path = ROOT / "data" / "generated" / ("two_step" if two_step else "") / f"{name}.jsonl"
         if not path.exists():
             raise SystemExit(f"{path} not found -- build that split first")
-        rows += [json.loads(line) for line in path.open(encoding="utf-8")]
+        rows += [json.loads(line) for line in path.open(encoding="utf-8")][::int(every or 1)]
     if exclude:
         kept = [r for r in rows if not CONSTRUCTS[exclude](r)]
         print(f"{split}: held out {len(rows) - len(kept)} of {len(rows)} programs with a {exclude}",
@@ -92,11 +109,11 @@ def load_rows(split: str, limit: int | None, exclude: str | None = None) -> list
     return rows[:limit] if limit else rows
 
 
-def encode(tokenizer, system: str, template: str, row: dict, max_len: int) -> dict:
+def encode(tokenizer, system: str, template: str, row: dict, max_len: int, answer: str = "target") -> dict:
     """Token ids for one chat, with the prompt masked out of the labels."""
     prompt = [{"role": "system", "content": system},
               {"role": "user", "content": _render(template, row)}]
-    full = prompt + [{"role": "assistant", "content": row["target"].strip()}]
+    full = prompt + [{"role": "assistant", "content": row[answer].strip()}]
     prompt_text = tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
     full_text = tokenizer.apply_chat_template(full, tokenize=False)
     # Masking by length is only right if the prompt is a strict prefix of the chat.
@@ -213,6 +230,10 @@ def main() -> None:
                          "memory, and exit (5 if they do not fit) -- minutes, not hours, to find out")
     ap.add_argument("--time-budget-hours", type=float, default=9.0)
     ap.add_argument("--fp32", action="store_true", help="no fp16, even on a GPU (slower, never overflows)")
+    ap.add_argument("--two-step", action="store_true",
+                    help="train the two-step format: two examples per program (see the docstring)")
+    ap.add_argument("--full-prompts", action="store_true",
+                    help="with --two-step: the full-rules prompts instead of the brief ones")
     args = ap.parse_args()
 
     cuda = torch.cuda.is_available()
@@ -220,24 +241,30 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(args.base)
     pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
 
-    system, template = load_prompt(PROMPT)
+    # (system, template, answer field) per example of a program
+    if args.full_prompts and not args.two_step:
+        raise SystemExit("--full-prompts only applies with --two-step")
+    two_step_prompts = TWO_STEP_FULL_PROMPTS if args.full_prompts else TWO_STEP_PROMPTS
+    prompts = ([(*load_prompt(name), field) for name, field in two_step_prompts] if args.two_step
+               else [(*load_prompt(PROMPT), "target")])
 
     def encode_all(rows: list[dict], name: str) -> list[dict]:
         out, dropped = [], []
         for r in rows:
-            try:
-                out.append(encode(tokenizer, system, template, r, args.max_len))
-            except ValueError:
-                if not args.drop_over_max:
-                    raise
-                dropped.append(r["id"])
+            for system, template, answer in prompts:
+                try:
+                    out.append(encode(tokenizer, system, template, r, args.max_len, answer))
+                except ValueError:
+                    if not args.drop_over_max:
+                        raise
+                    dropped.append(r["id"] + ("" if answer == "target" else f"/{answer}"))
         if dropped:
             print(f"{name}: left out {len(dropped)} examples over --max-len {args.max_len}: "
                   f"{', '.join(dropped[:8])}{' ...' if len(dropped) > 8 else ''}", flush=True)
         return out
 
-    train = encode_all(load_rows(args.train_split, args.limit_train, args.exclude_construct), "train")
-    val = encode_all(load_rows(args.val_split, args.limit_val, args.exclude_construct), "val")
+    train = encode_all(load_rows(args.train_split, args.limit_train, args.exclude_construct, args.two_step), "train")
+    val = encode_all(load_rows(args.val_split, args.limit_val, args.exclude_construct, args.two_step), "val")
     lengths = [len(e["input_ids"]) for e in train + val]
     print(f"{len(train)} train / {len(val)} val examples; tokens per example "
           f"mean {sum(lengths) / len(lengths):.0f}, max {max(lengths)} (limit {args.max_len})",
@@ -326,7 +353,8 @@ def main() -> None:
     trainer.save_model(str(out))             # the best checkpoint by val loss
     tokenizer.save_pretrained(str(out))
     evals = [h for h in trainer.state.log_history if "eval_loss" in h]
-    summary = {"base": args.base, "prompt": PROMPT, "excluded_construct": args.exclude_construct,
+    summary = {"base": args.base,
+               "prompt": ("two_step" if args.full_prompts else "two_step_brief") if args.two_step else PROMPT, "excluded_construct": args.exclude_construct,
                "train_split": args.train_split, "val_split": args.val_split, "max_len": args.max_len,
                "train_examples": len(train),
                "val_examples": len(val), "epochs": args.epochs, "lr": args.lr,

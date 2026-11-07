@@ -1,0 +1,207 @@
+You are given Python source, with numbered lines, that defines a PyTorch nn.Module and
+creates one instance of it. Without running the code, list the nodes of its forward pass
+as torch.fx would trace it. The edges are asked for separately.
+
+Rules
+- One node per traced operation. The op is one of:
+    placeholder     an input to forward()
+    get_attr        a stored parameter or buffer read directly
+    call_module     a layer, e.g. nn.Linear or nn.Conv2d
+    call_function   a free function, e.g. add, cat, relu, gelu
+    call_method     a tensor method, e.g. view, mean, flatten
+    output          the value returned
+- A node line is:
+    <id> <op> <target> [<Class>(<params>)] [<shape>]  @<lines>
+  * <target> is the attribute path for call_module (fc1, blocks.0, layer1.0.conv1),
+    and the normalised function name otherwise (add, cat, relu, gelu, view).
+  * <Class>(<params>) appears for call_module only. Write exactly these parameters,
+    named this way, and no others; a layer with no parameters is the bare class name:
+      Linear(in=8,out=16,bias=True)        Conv2d(in=3,out=16,k=3,s=1,p=1)
+      BatchNorm2d(features=16)             LayerNorm(shape=[32])
+      MaxPool2d(k=2,s=2)                   AdaptiveAvgPool2d(out=1)
+      Flatten(start=1,end=-1)              Dropout(p=0.1)
+      Embedding(num=100,dim=16)            ReLU   GELU   SiLU   Sigmoid   Tanh
+    Every Conv/ConvTranspose takes in,out,k,s,p (and g only when groups is not 1),
+    never bias. BatchNorm and GroupNorm take features. MaxPool/AvgPool take k,s.
+    AdaptiveAvgPool/AdaptiveMaxPool take out. A layer not listed here, such as
+    MultiheadAttention or Upsample, is the bare class name. A list value is bracketed
+    and joined with x: k=[3x5].
+  * <shape> is that node's output shape in square brackets, e.g. [2,16].
+    The shape going in is given by example_input at the bottom of the source.
+  * @<lines> is where the node comes from: the numbers of the source lines being run
+    when it is made, outermost call first, joined with >. @64>56>16 means line 64
+    called something whose line 56 called something whose line 16 makes the node.
+    Only lines of this source count: when nn.Sequential runs its layers, that happens
+    inside PyTorch, so a layer of `x = self.features(x)` on line 50 is @50 (plus the
+    lines of its own forward, if it has one). The placeholder and output nodes have
+    no @.
+- Function names are normalised: `x + y`, torch.add(x, y) and x.add(y) are all `add`;
+  F.relu, torch.relu and x.relu() are all `relu`. An activation written as a layer
+  (nn.ReLU) stays a call_module node with its attribute path.
+- Ids start at 0 and follow the order the operations run in.
+- Unroll every loop. Expand nn.Sequential and nn.ModuleList into one node per layer,
+  with paths like blocks.0, blocks.1. Omit any branch that cannot run, such as an
+  `if` on an attribute that is False.
+- Output only the nodes, in exactly this format:
+
+INPUTS 1
+NODES
+0 placeholder x [1,8]
+1 call_module fc Linear(in=8,out=2,bias=True) [1,2]  @9
+2 output output [1,2]
+
+Example 1
+Code:
+```python
+ 1| import torch
+ 2| from torch import nn
+ 3| from torch.nn import functional as F
+ 4| 
+ 5| 
+ 6| class BasicConv(nn.Module):
+ 7|     def __init__(self, in_channels, out_channels, **kwargs):
+ 8|         super().__init__()
+ 9|         self.conv = nn.Conv2d(in_channels, out_channels, bias=False, **kwargs)
+10|         self.bn = nn.BatchNorm2d(out_channels, eps=0.001)
+11|         self.act = nn.Hardswish()
+12| 
+13|     def forward(self, x):
+14|         x = self.conv(x)
+15|         x = self.bn(x)
+16|         return self.act(x)
+17| 
+18| 
+19| class Inception(nn.Module):
+20|     def __init__(self, in_channels, ch1, ch2, pool_features):
+21|         super().__init__()
+22|         self.branch1 = BasicConv(in_channels, ch1, kernel_size=1)
+23|         self.branch2_1 = BasicConv(in_channels, ch2, kernel_size=1)
+24|         self.branch2_2 = BasicConv(ch2, ch2, kernel_size=5, padding=2)
+25|         self.pool = nn.AvgPool2d(kernel_size=3, stride=1, padding=1)
+26|         self.branch_pool = BasicConv(in_channels, pool_features, kernel_size=1)
+27| 
+28|     def _forward(self, x):
+29|         b1 = self.branch1(x)
+30|         y2 = self.branch2_1(x)
+31|         y2 = self.branch2_2(y2)
+32|         bp = self.pool(x)
+33|         bp = self.branch_pool(bp)
+34|         return [b1, y2, bp]
+35| 
+36|     def forward(self, x):
+37|         outputs = self._forward(x)
+38|         return torch.cat(outputs, 1)
+39| 
+40| 
+41| net = Inception(32, 24, 24, 16)
+42| example_input = torch.randn(1, 32, 8, 8)
+```
+INPUTS 1
+NODES
+0 placeholder x [1,32,8,8]
+1 call_module branch1.conv Conv2d(in=32,out=24,k=1,s=1,p=0) [1,24,8,8]  @37>29>14
+2 call_module branch1.bn BatchNorm2d(features=24) [1,24,8,8]  @37>29>15
+3 call_module branch1.act Hardswish [1,24,8,8]  @37>29>16
+4 call_module branch2_1.conv Conv2d(in=32,out=24,k=1,s=1,p=0) [1,24,8,8]  @37>30>14
+5 call_module branch2_1.bn BatchNorm2d(features=24) [1,24,8,8]  @37>30>15
+6 call_module branch2_1.act Hardswish [1,24,8,8]  @37>30>16
+7 call_module branch2_2.conv Conv2d(in=24,out=24,k=5,s=1,p=2) [1,24,8,8]  @37>31>14
+8 call_module branch2_2.bn BatchNorm2d(features=24) [1,24,8,8]  @37>31>15
+9 call_module branch2_2.act Hardswish [1,24,8,8]  @37>31>16
+10 call_module pool AvgPool2d(k=3,s=1) [1,32,8,8]  @37>32
+11 call_module branch_pool.conv Conv2d(in=32,out=16,k=1,s=1,p=0) [1,16,8,8]  @37>33>14
+12 call_module branch_pool.bn BatchNorm2d(features=16) [1,16,8,8]  @37>33>15
+13 call_module branch_pool.act Hardswish [1,16,8,8]  @37>33>16
+14 call_function cat [1,64,8,8]  @38
+15 output output [1,64,8,8]
+
+Example 2
+Code:
+```python
+ 1| import torch
+ 2| from torch import nn
+ 3| from torch.nn import functional as F
+ 4| 
+ 5| 
+ 6| class BasicConv(nn.Module):
+ 7|     def __init__(self, in_channels, out_channels, **kwargs):
+ 8|         super().__init__()
+ 9|         self.conv = nn.Conv2d(in_channels, out_channels, bias=False, **kwargs)
+10|         self.bn = nn.BatchNorm2d(out_channels, eps=0.001)
+11|         self.act = nn.ReLU()
+12| 
+13|     def forward(self, feats):
+14|         feats = self.conv(feats)
+15|         feats = self.bn(feats)
+16|         return self.act(feats)
+17| 
+18| 
+19| class SqueezeExcitation(nn.Module):
+20|     def __init__(self, channels, squeeze_channels):
+21|         super().__init__()
+22|         self.avgpool = nn.AdaptiveAvgPool2d(1)
+23|         self.fc1 = nn.Conv2d(channels, squeeze_channels, 1)
+24|         self.fc2 = nn.Conv2d(squeeze_channels, channels, 1)
+25|         self.activation = nn.ReLU()
+26|         self.scale_activation = nn.Hardsigmoid()
+27| 
+28|     def forward(self, feats):
+29|         scale = self.avgpool(feats)
+30|         scale = self.fc1(scale)
+31|         scale = self.activation(scale)
+32|         scale = self.fc2(scale)
+33|         scale = self.scale_activation(scale)
+34|         return scale * feats
+35| 
+36| 
+37| class MobileBlock(nn.Module):
+38|     def __init__(self, inp, oup, stride, expand_ratio, use_se=False):
+39|         super().__init__()
+40|         self.stride = stride
+41| 
+42|         hidden_dim = int(round(inp * expand_ratio))
+43|         self.residual = self.stride == 1 and inp == oup
+44| 
+45|         layers = []
+46|         if expand_ratio != 1:
+47|             layers.append(BasicConv(inp, hidden_dim, kernel_size=1))
+48|         layers.append(BasicConv(hidden_dim, hidden_dim, kernel_size=3, stride=stride, padding=1, groups=hidden_dim))
+49|         if use_se:
+50|             layers.append(SqueezeExcitation(hidden_dim, max(1, hidden_dim // 4)))
+51|         layers.append(nn.Conv2d(hidden_dim, oup, 1, 1, 0, bias=False))
+52|         layers.append(nn.BatchNorm2d(oup))
+53|         self.conv = nn.Sequential(*layers)
+54| 
+55|     def forward(self, feats):
+56|         if self.residual:
+57|             return feats + self.conv(feats)
+58|         return self.conv(feats)
+59| 
+60| 
+61| block = MobileBlock(32, 32, 1, 4, use_se=True)
+62| example_input = torch.randn(1, 32, 28, 28)
+```
+INPUTS 1
+NODES
+0 placeholder feats [1,32,28,28]
+1 call_module conv.0.conv Conv2d(in=32,out=128,k=1,s=1,p=0) [1,128,28,28]  @57>14
+2 call_module conv.0.bn BatchNorm2d(features=128) [1,128,28,28]  @57>15
+3 call_module conv.0.act ReLU [1,128,28,28]  @57>16
+4 call_module conv.1.conv Conv2d(in=128,out=128,k=3,s=1,p=1,g=128) [1,128,28,28]  @57>14
+5 call_module conv.1.bn BatchNorm2d(features=128) [1,128,28,28]  @57>15
+6 call_module conv.1.act ReLU [1,128,28,28]  @57>16
+7 call_module conv.2.avgpool AdaptiveAvgPool2d(out=1) [1,128,1,1]  @57>29
+8 call_module conv.2.fc1 Conv2d(in=128,out=32,k=1,s=1,p=0) [1,32,1,1]  @57>30
+9 call_module conv.2.activation ReLU [1,32,1,1]  @57>31
+10 call_module conv.2.fc2 Conv2d(in=32,out=128,k=1,s=1,p=0) [1,128,1,1]  @57>32
+11 call_module conv.2.scale_activation Hardsigmoid [1,128,1,1]  @57>33
+12 call_function mul [1,128,28,28]  @57>34
+13 call_module conv.3 Conv2d(in=128,out=32,k=1,s=1,p=0) [1,32,28,28]  @57
+14 call_module conv.4 BatchNorm2d(features=32) [1,32,28,28]  @57
+15 call_function add [1,32,28,28]  @57
+16 output output [1,32,28,28]
+---USER---
+Code:
+```python
+{numbered_code}
+```

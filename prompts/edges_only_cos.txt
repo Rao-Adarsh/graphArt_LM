@@ -1,0 +1,286 @@
+You are given Python source that defines a PyTorch nn.Module, and the list of operations
+its forward pass performs. Without running the code, work out how those operations
+connect.
+
+The nodes are given to you and are correct. Do NOT repeat them, change them or add to
+them. Produce only the edges.
+
+Rules
+- An edge A -> B means node A's output is an argument of node B, and names the argument
+  slots it fills:
+    3 -> 5 : arg0
+  If one value fills several slots of the same operation, that is ONE edge listing all
+  of them:
+    4 -> 5 : arg0 arg1
+  So `x + x`, where both operands are the same value, is a single edge with two slots.
+- Slots count tensor arguments only, left to right. In cat([a, b], dim=1) the tensors
+  a and b are arg0 and arg1; dim is not a slot.
+- Every node except the inputs must receive its operands from somewhere, and every node
+  must lead towards the output.
+- Work from the source: follow which variable holds which node's result as forward()
+  proceeds, and read the connections off that.
+
+HOW TO WORK IT OUT
+
+Simulate forward() one statement at a time, as if you were the interpreter, keeping a
+record of which node each variable holds. When a statement calls a helper -- a module
+or function of this source, or an nn.Sequential of them -- step into it: its lines run
+with its own variable names, its parameters holding what it was called with. Every
+given node is made by exactly one line of this simulation.
+
+Write the simulation under a heading SIMULATION, one line per node:
+    <statement>   ->   n<id> <op> <target>   <- <variable>=n<id> arg<k>, ...
+(an input no variable holds -- a nested call, the previous layer of an nn.Sequential --
+is just n<id> arg<k>). Then write the edges under the heading EDGES, in exactly this
+format, one edge per line, and nothing after them:
+
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+
+Example 1
+Code:
+```python
+import torch
+from torch import nn
+from torch.nn import functional as F
+
+
+class BasicConv(nn.Module):
+    def __init__(self, in_channels, out_channels, **kwargs):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, bias=False, **kwargs)
+        self.bn = nn.BatchNorm2d(out_channels, eps=0.001)
+        self.act = nn.Hardswish()
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.bn(x)
+        return self.act(x)
+
+
+class Inception(nn.Module):
+    def __init__(self, in_channels, ch1, ch2, pool_features):
+        super().__init__()
+        self.branch1 = BasicConv(in_channels, ch1, kernel_size=1)
+        self.branch2_1 = BasicConv(in_channels, ch2, kernel_size=1)
+        self.branch2_2 = BasicConv(ch2, ch2, kernel_size=5, padding=2)
+        self.pool = nn.AvgPool2d(kernel_size=3, stride=1, padding=1)
+        self.branch_pool = BasicConv(in_channels, pool_features, kernel_size=1)
+
+    def _forward(self, x):
+        b1 = self.branch1(x)
+        y2 = self.branch2_1(x)
+        y2 = self.branch2_2(y2)
+        bp = self.pool(x)
+        bp = self.branch_pool(bp)
+        return [b1, y2, bp]
+
+    def forward(self, x):
+        outputs = self._forward(x)
+        return torch.cat(outputs, 1)
+
+
+net = Inception(32, 24, 24, 16)
+example_input = torch.randn(1, 32, 8, 8)
+```
+
+Nodes:
+INPUTS 1
+NODES
+0 placeholder x [1,32,8,8]
+1 call_module branch1.conv Conv2d(in=32,out=24,k=1,s=1,p=0) [1,24,8,8]
+2 call_module branch1.bn BatchNorm2d(features=24) [1,24,8,8]
+3 call_module branch1.act Hardswish [1,24,8,8]
+4 call_module branch2_1.conv Conv2d(in=32,out=24,k=1,s=1,p=0) [1,24,8,8]
+5 call_module branch2_1.bn BatchNorm2d(features=24) [1,24,8,8]
+6 call_module branch2_1.act Hardswish [1,24,8,8]
+7 call_module branch2_2.conv Conv2d(in=24,out=24,k=5,s=1,p=2) [1,24,8,8]
+8 call_module branch2_2.bn BatchNorm2d(features=24) [1,24,8,8]
+9 call_module branch2_2.act Hardswish [1,24,8,8]
+10 call_module pool AvgPool2d(k=3,s=1) [1,32,8,8]
+11 call_module branch_pool.conv Conv2d(in=32,out=16,k=1,s=1,p=0) [1,16,8,8]
+12 call_module branch_pool.bn BatchNorm2d(features=16) [1,16,8,8]
+13 call_module branch_pool.act Hardswish [1,16,8,8]
+14 call_function cat [1,64,8,8]
+15 output output [1,64,8,8]
+
+SIMULATION
+x is the input   ->   n0 placeholder x
+outputs = self._forward(x)   (steps into it)
+    b1 = self.branch1(x)   (steps into branch1)
+        x = self.conv(x)   ->   n1 call_module branch1.conv   <- x=n0 arg0
+        x = self.bn(x)   ->   n2 call_module branch1.bn   <- x=n1 arg0
+        return self.act(x)   ->   n3 call_module branch1.act   <- x=n2 arg0
+    y2 = self.branch2_1(x)   (steps into branch2_1)
+        x = self.conv(x)   ->   n4 call_module branch2_1.conv   <- x=n0 arg0
+        x = self.bn(x)   ->   n5 call_module branch2_1.bn   <- x=n4 arg0
+        return self.act(x)   ->   n6 call_module branch2_1.act   <- x=n5 arg0
+    y2 = self.branch2_2(y2)   (steps into branch2_2)
+        x = self.conv(x)   ->   n7 call_module branch2_2.conv   <- x=n6 arg0
+        x = self.bn(x)   ->   n8 call_module branch2_2.bn   <- x=n7 arg0
+        return self.act(x)   ->   n9 call_module branch2_2.act   <- x=n8 arg0
+    bp = self.pool(x)   ->   n10 call_module pool   <- x=n0 arg0
+    bp = self.branch_pool(bp)   (steps into branch_pool)
+        x = self.conv(x)   ->   n11 call_module branch_pool.conv   <- x=n10 arg0
+        x = self.bn(x)   ->   n12 call_module branch_pool.bn   <- x=n11 arg0
+        return self.act(x)   ->   n13 call_module branch_pool.act   <- x=n12 arg0
+return torch.cat(outputs, 1)   ->   n14 call_function cat   <- outputs[0]=n3 arg0, outputs[1]=n9 arg1, outputs[2]=n13 arg2
+return   ->   n15 output output   <- n14 arg0
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+0 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+8 -> 9 : arg0
+0 -> 10 : arg0
+10 -> 11 : arg0
+11 -> 12 : arg0
+12 -> 13 : arg0
+3 -> 14 : arg0
+9 -> 14 : arg1
+13 -> 14 : arg2
+14 -> 15 : arg0
+
+Example 2
+Code:
+```python
+import torch
+from torch import nn
+from torch.nn import functional as F
+
+
+class BasicConv(nn.Module):
+    def __init__(self, in_channels, out_channels, **kwargs):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, bias=False, **kwargs)
+        self.bn = nn.BatchNorm2d(out_channels, eps=0.001)
+        self.act = nn.ReLU()
+
+    def forward(self, feats):
+        feats = self.conv(feats)
+        feats = self.bn(feats)
+        return self.act(feats)
+
+
+class SqueezeExcitation(nn.Module):
+    def __init__(self, channels, squeeze_channels):
+        super().__init__()
+        self.avgpool = nn.AdaptiveAvgPool2d(1)
+        self.fc1 = nn.Conv2d(channels, squeeze_channels, 1)
+        self.fc2 = nn.Conv2d(squeeze_channels, channels, 1)
+        self.activation = nn.ReLU()
+        self.scale_activation = nn.Hardsigmoid()
+
+    def forward(self, feats):
+        scale = self.avgpool(feats)
+        scale = self.fc1(scale)
+        scale = self.activation(scale)
+        scale = self.fc2(scale)
+        scale = self.scale_activation(scale)
+        return scale * feats
+
+
+class MobileBlock(nn.Module):
+    def __init__(self, inp, oup, stride, expand_ratio, use_se=False):
+        super().__init__()
+        self.stride = stride
+
+        hidden_dim = int(round(inp * expand_ratio))
+        self.residual = self.stride == 1 and inp == oup
+
+        layers = []
+        if expand_ratio != 1:
+            layers.append(BasicConv(inp, hidden_dim, kernel_size=1))
+        layers.append(BasicConv(hidden_dim, hidden_dim, kernel_size=3, stride=stride, padding=1, groups=hidden_dim))
+        if use_se:
+            layers.append(SqueezeExcitation(hidden_dim, max(1, hidden_dim // 4)))
+        layers.append(nn.Conv2d(hidden_dim, oup, 1, 1, 0, bias=False))
+        layers.append(nn.BatchNorm2d(oup))
+        self.conv = nn.Sequential(*layers)
+
+    def forward(self, feats):
+        if self.residual:
+            return feats + self.conv(feats)
+        return self.conv(feats)
+
+
+block = MobileBlock(32, 32, 1, 4, use_se=True)
+example_input = torch.randn(1, 32, 28, 28)
+```
+
+Nodes:
+INPUTS 1
+NODES
+0 placeholder feats [1,32,28,28]
+1 call_module conv.0.conv Conv2d(in=32,out=128,k=1,s=1,p=0) [1,128,28,28]
+2 call_module conv.0.bn BatchNorm2d(features=128) [1,128,28,28]
+3 call_module conv.0.act ReLU [1,128,28,28]
+4 call_module conv.1.conv Conv2d(in=128,out=128,k=3,s=1,p=1,g=128) [1,128,28,28]
+5 call_module conv.1.bn BatchNorm2d(features=128) [1,128,28,28]
+6 call_module conv.1.act ReLU [1,128,28,28]
+7 call_module conv.2.avgpool AdaptiveAvgPool2d(out=1) [1,128,1,1]
+8 call_module conv.2.fc1 Conv2d(in=128,out=32,k=1,s=1,p=0) [1,32,1,1]
+9 call_module conv.2.activation ReLU [1,32,1,1]
+10 call_module conv.2.fc2 Conv2d(in=32,out=128,k=1,s=1,p=0) [1,128,1,1]
+11 call_module conv.2.scale_activation Hardsigmoid [1,128,1,1]
+12 call_function mul [1,128,28,28]
+13 call_module conv.3 Conv2d(in=128,out=32,k=1,s=1,p=0) [1,32,28,28]
+14 call_module conv.4 BatchNorm2d(features=32) [1,32,28,28]
+15 call_function add [1,32,28,28]
+16 output output [1,32,28,28]
+
+SIMULATION
+feats is the input   ->   n0 placeholder feats
+return feats + self.conv(feats)   (steps into conv.0)
+    feats = self.conv(feats)   ->   n1 call_module conv.0.conv   <- feats=n0 arg0
+    feats = self.bn(feats)   ->   n2 call_module conv.0.bn   <- feats=n1 arg0
+    return self.act(feats)   ->   n3 call_module conv.0.act   <- feats=n2 arg0
+return feats + self.conv(feats)   (steps into conv.1)
+    feats = self.conv(feats)   ->   n4 call_module conv.1.conv   <- feats=n3 arg0
+    feats = self.bn(feats)   ->   n5 call_module conv.1.bn   <- feats=n4 arg0
+    return self.act(feats)   ->   n6 call_module conv.1.act   <- feats=n5 arg0
+return feats + self.conv(feats)   (steps into conv.2)
+    scale = self.avgpool(feats)   ->   n7 call_module conv.2.avgpool   <- feats=n6 arg0
+    scale = self.fc1(scale)   ->   n8 call_module conv.2.fc1   <- scale=n7 arg0
+    scale = self.activation(scale)   ->   n9 call_module conv.2.activation   <- scale=n8 arg0
+    scale = self.fc2(scale)   ->   n10 call_module conv.2.fc2   <- scale=n9 arg0
+    scale = self.scale_activation(scale)   ->   n11 call_module conv.2.scale_activation   <- scale=n10 arg0
+    return scale * feats   ->   n12 call_function mul   <- scale=n11 arg0, feats=n6 arg1
+return feats + self.conv(feats)   ->   n13 call_module conv.3   <- n12 arg0
+return feats + self.conv(feats)   ->   n14 call_module conv.4   <- n13 arg0
+return feats + self.conv(feats)   ->   n15 call_function add   <- feats=n0 arg0, n14 arg1
+return   ->   n16 output output   <- n15 arg0
+EDGES
+0 -> 1 : arg0
+1 -> 2 : arg0
+2 -> 3 : arg0
+3 -> 4 : arg0
+4 -> 5 : arg0
+5 -> 6 : arg0
+6 -> 7 : arg0
+7 -> 8 : arg0
+8 -> 9 : arg0
+9 -> 10 : arg0
+10 -> 11 : arg0
+6 -> 12 : arg1
+11 -> 12 : arg0
+12 -> 13 : arg0
+13 -> 14 : arg0
+0 -> 15 : arg0
+14 -> 15 : arg1
+15 -> 16 : arg0
+---USER---
+Code:
+```python
+{code}
+```
+
+Nodes:
+{nodes}
+
+Edges:

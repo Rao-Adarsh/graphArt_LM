@@ -35,12 +35,17 @@ def extract_graph_block(reply: str) -> str:
     lines = reply.splitlines()
     starts = [i for i, line in enumerate(lines) if line.strip().startswith(GRAPH_HEADER)]
     if not starts:
-        return reply
+        return _STACK.sub("", reply)
     block = lines[starts[-1]:]
     for i, line in enumerate(block):
         if line.strip().startswith("```"):       # stop at a closing fence
-            return "\n".join(block[:i])
-    return "\n".join(block)
+            return _STACK.sub("", "\n".join(block[:i]))
+    return _STACK.sub("", "\n".join(block))
+
+
+# `  @64>56>16` after a node line: the source lines that make the node, which the
+# two-step and stack prompts ask for (graphart/two_step.py). Not part of the graph.
+_STACK = re.compile(r"[ \t]+@\d+(?:>\d+)*[ \t]*$", re.M)
 
 
 def _splice_nodes(reply: str, truth: dict) -> str:
