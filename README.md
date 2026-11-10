@@ -233,6 +233,11 @@ The same 40 stratified test samples (10 per tier) for every run. Replies are in
 `results/*.jsonl`; `python -m pipeline.compare results/*.jsonl --markdown` regenerates the
 headline table.
 
+**After the closing experiments** — training on library-style code, CoS traces, the
+two-step format and two-GPU training, scored on real torchvision code — see
+[`docs/experiments.md`](docs/experiments.md): one table of every variant, and what we
+take from it.
+
 ### Zero-shot across model sizes
 
 | model | where | n | parsed | valid | **exact** | topo | t1 | t2 | t3 | t4 |

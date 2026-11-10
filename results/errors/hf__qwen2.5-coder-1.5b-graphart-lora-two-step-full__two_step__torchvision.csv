@@ -1,0 +1,22 @@
+id,category,detail
+tv-resnet-basicblock,exact,
+tv-resnet-basicblock-down,miswired,
+tv-resnet-bottleneck,notation,
+tv-squeezenet-fire,exact,
+tv-googlenet-inception,exact,
+tv-inceptionv3-a,exact,
+tv-inceptionv3-b,notation,
+tv-inceptionv3-c,wrong_ops,missing: call_module/branch1x1.conv/Conv2d; call_module/branch1x1.bn/BatchNorm2d; call/relu x10; call_module/branch7x7_1.conv/Conv2d; call_module/branch7x7_1.bn/BatchNorm2d; call_module/branch7x7_2.conv/Conv2d | extra: call_module/branch1x1/Conv2d; call_module/branch7x7_1/Conv2d; call_module/branch7x7_2/Conv2d; call_module/branch7x7_3/Conv2d; call_module/branch7x7dbl_1/Conv2d; call_module/branch7x7dbl_2/Conv2d
+tv-shufflenet-unit,wrong_ops,missing: call/chunk; call/getitem x2 | extra: -
+tv-shufflenet-unit-down,wrong_ops,missing: call_module/branch1.0/Conv2d; call_module/branch1.1/BatchNorm2d; call_module/branch1.2/Conv2d; call_module/branch1.3/BatchNorm2d; call/relu; call/operator.floordiv | extra: call/chunk; call/builtins.getitem x2
+tv-vit-encoderblock,wrong_ops,missing: call/dim; call/operator.eq; call/builtins.getattr; call/_assert; call_module/mlp.2/Dropout; call_module/mlp.3/Linear | extra: call_module/mlp.2/Linear
+tv-inceptionv3-d,miswired,
+tv-inceptionv3-e,unparseable,line 37: cannot parse '1 <- x=0 arg0'
+tv-inceptionv3-aux,spelling,
+tv-googlenet-aux,wrong_ops,missing: call_module/fc1/Linear | extra: -
+tv-mnasnet-residual,wrong_ops,missing: call/add | extra: -
+tv-mnasnet-down,exact,
+tv-mobilenetv2-residual,wrong_ops,missing: call_module/conv.1.0/Conv2d; call/add | extra: call_module/conv.1.0/Conv2dNormActivation
+tv-alexnet,notation,
+tv-squeezenet1_1,wrong_ops,missing: call/relu x12; call_module/features.3.squeeze/Conv2d; call/cat x4; call_module/features.4.squeeze/Conv2d; call_module/features.6.squeeze/Conv2d; call_module/features.7.squeeze/Conv2d | extra: call_module/features.3.squeez<|fim_suffix|>e=1); call_module/features.4.squeezed/Conv2d; call_module/features.6.squeezed/Conv2d; call_module/features.7.squeezed/Conv2d
+tv-resnet18,wrong_ops,missing: call_module/layer2.0.conv2/Conv2d; call_module/layer2.0.bn2/BatchNorm2d; call_module/layer3.0.conv2/Conv2d; call_module/layer3.0.bn2/BatchNorm2d; call_module/layer4.0.conv2/Conv2d; call_module/layer4.0.bn2/BatchNorm2d | extra: call_module/layer1.0.downsample.0/Conv2d; call_module/layer1.0.downsample.1/BatchNorm2d

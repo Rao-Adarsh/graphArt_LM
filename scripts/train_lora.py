@@ -16,6 +16,10 @@ used alone:
 
     python scripts/train_lora.py --out lora/mixed --train-split train,large_train --val-split val,large_val --max-len 8192
 
+On two GPUs, run it under torchrun and halve --grad-accum to keep the effective batch:
+
+    torchrun --nproc_per_node 2 scripts/train_lora.py --out lora/x --grad-accum 8 ...
+
 The adapter it saves is scored like any other model:
 
     python -m pipeline.run_prompting --backend hf --model lora/qwen2.5-coder-1.5b-graphart --prompt zero_shot --stratify 10
@@ -72,6 +76,9 @@ EXIT_NONFINITE_LOSS = 4
 EXIT_OUT_OF_MEMORY = 5               # --memory-check: the longest examples do not fit
 MEMORY_HEADROOM = 0.85               # --memory-check fails above this share of the GPU
 LOSS_CHUNK = 1024                    # answer tokens whose logits exist at once
+# >1 under torchrun (one process per GPU): each step's batch is split across the GPUs, so
+# the same effective batch needs --grad-accum divided by this.
+WORLD_SIZE = int(os.environ.get("WORLD_SIZE", "1"))
 
 
 class NonFiniteLoss(RuntimeError):
@@ -144,11 +151,16 @@ def lean_loss(model, batch: dict, num_items=None, fp16: bool = False):
     logits are made for answer positions only, one chunk at a time, and recomputed in
     backward. Same value as the default loss: a sum over answer tokens divided by
     `num_items` (the Trainer's count across gradient accumulation) or by their number.
+
+    The hidden states come through the model's own forward -- asked for logits at the
+    last position only -- not from its inner layers: with two GPUs, that call is where
+    DistributedDataParallel synchronises the gradients, and going around it would leave
+    each GPU training its own copy. `model` may be that wrapper or the PeftModel itself.
     """
-    causal = model.get_base_model()
+    causal = getattr(model, "module", model).get_base_model()
     with torch.autocast(device_type=batch["input_ids"].device.type, dtype=torch.float16, enabled=fp16):
-        hidden = causal.model(input_ids=batch["input_ids"],
-                              attention_mask=batch["attention_mask"]).last_hidden_state
+        hidden = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"],
+                       output_hidden_states=True, logits_to_keep=1).hidden_states[-1]
         labels = batch["labels"][:, 1:]          # position t predicts token t+1
         keep = labels != IGNORE
         h, y = hidden[:, :-1][keep], labels[keep]
@@ -167,7 +179,13 @@ class LeanLossTrainer(Trainer):
         self.lean_fp16 = fp16
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
-        loss = lean_loss(self.accelerator.unwrap_model(model), inputs, num_items_in_batch, self.lean_fp16)
+        loss = lean_loss(model, inputs, num_items_in_batch, self.lean_fp16)
+        # With several GPUs the Trainer counts answer tokens across all of them, so each
+        # GPU's sum is divided by the total; DDP then averages the GPUs' gradients. Scale
+        # back by the GPU count, as the Trainer's own compute_loss does, or every gradient
+        # (and the logged loss) comes out divided by it.
+        if num_items_in_batch is not None and self.args.average_tokens_across_devices:
+            loss = loss * self.accelerator.num_processes
         return (loss, {"loss": loss}) if return_outputs else loss
 
 
@@ -187,7 +205,14 @@ class Guard(TrainerCallback):
                                     "fp16 overflow? rerun with --fp32")
 
     def on_step_end(self, args, state, control, **_):
-        if time.time() - self.start > self.budget_s:
+        stop = time.time() - self.start > self.budget_s
+        if torch.distributed.is_available() and torch.distributed.is_initialized():
+            # Every GPU must stop at the same step, or the one that carries on waits for
+            # the other's gradients forever: stop when any of them is out of time.
+            flag = torch.tensor([float(stop)], device=args.device)
+            torch.distributed.all_reduce(flag, op=torch.distributed.ReduceOp.MAX)
+            stop = bool(flag.item())
+        if stop:
             print(f"time budget spent at step {state.global_step}; stopping", flush=True)
             control.should_training_stop = True
             control.should_save = True
@@ -325,7 +350,8 @@ def main() -> None:
         save_strategy="no" if smoke else "steps", save_steps=args.eval_steps, save_total_limit=2,
         load_best_model_at_end=not smoke, metric_for_best_model="eval_loss", greater_is_better=False,
         fp16=fp16, report_to="none", seed=0, data_seed=0, remove_unused_columns=False,
-        dataloader_num_workers=0)
+        dataloader_num_workers=0,
+        ddp_find_unused_parameters=False)       # every LoRA weight is used in every step
     guard = Guard(args.time_budget_hours * 3600)
     trainer = LeanLossTrainer(model=model, args=training_args, train_dataset=train, eval_dataset=val,
                               data_collator=collate(pad_id), callbacks=[guard], fp16=fp16)
@@ -339,6 +365,8 @@ def main() -> None:
     elapsed = time.time() - started
 
     if smoke:
+        if not trainer.is_world_process_zero():
+            raise SystemExit(0)                  # the main process judges the run
         # A clear drop, not noise: the last few steps must average 10% below the first
         # few. A model that is learning the output format falls much faster than that.
         mean = lambda xs: sum(xs) / len(xs)
@@ -351,6 +379,8 @@ def main() -> None:
 
     out = Path(args.out)
     trainer.save_model(str(out))             # the best checkpoint by val loss
+    if not trainer.is_world_process_zero():
+        return                               # with two GPUs, the main process writes the rest
     tokenizer.save_pretrained(str(out))
     evals = [h for h in trainer.state.log_history if "eval_loss" in h]
     summary = {"base": args.base,
@@ -359,7 +389,7 @@ def main() -> None:
                "train_examples": len(train),
                "val_examples": len(val), "epochs": args.epochs, "lr": args.lr,
                "rank": args.rank, "alpha": args.alpha,
-               "effective_batch": args.batch * args.grad_accum, "fp16": fp16,
+               "gpus": WORLD_SIZE, "effective_batch": args.batch * args.grad_accum * WORLD_SIZE, "fp16": fp16,
                "steps": trainer.state.global_step, "minutes": round(elapsed / 60, 1),
                "best_eval_loss": trainer.state.best_metric,
                "best_checkpoint": trainer.state.best_model_checkpoint,
