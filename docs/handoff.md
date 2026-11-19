@@ -1,6 +1,9 @@
 # Handoff — state and agenda
 
-*Updated 22 Oct 2026, after the first Phase 1 results. Read this first in a new session.*
+> **Historical (late October).** For the current state read `CLAUDE.md` at the repo root
+> and `docs/experiments.md`.
+
+*Updated 22 Oct 2026, after the first Phase 1 results.*
 
 ## Where things stand
 

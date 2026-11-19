@@ -29,6 +29,25 @@
    "Scored once per final model: zero_shot prompt, all 17 samples, reply cap 8000 tokens (the longest reference, tvh-mobilenetv3-small, is 7220).",
    "Reported with the unchanged scorer and scripts/classify_errors.py, blocks (14) and whole networks (3) separately.",
    "build_large_dataset.py rejects any generated program topology-isomorphic to one of these graphs."
+  ],
+  "amendments": [
+   {
+    "date": "2026-11-15",
+    "reason": "The final setup is a two-adapter pipeline, not one model under the zero_shot prompt. It was chosen on development data only (torchvision 21; E1-E4 in docs/experiments.md), before any reply on this set was produced.",
+    "final_setup": "qwen2.5-coder-1.5b-graphart-lora-mixed-v2 answers with the zero_shot prompt (reply cap 8000); the NODES of that reply are handed to qwen2.5-coder-1.5b-graphart-lora-wirer, which writes the edges with the brief step-2 prompt (pipeline/run_two_step.py --brief --step1-from, reply cap 8000). Greedy decoding, base Qwen/Qwen2.5-Coder-1.5B-Instruct, fp16.",
+    "adapter_sha256": {
+     "qwen2.5-coder-1.5b-graphart-lora-mixed-v2": "738c7da93813b6e6069f177dce266ac092b7bdcd87b42f70d1fca33dea74975e",
+     "qwen2.5-coder-1.5b-graphart-lora-wirer": "eb52d0f8110ac684ac120ac11bfc569559add1ffa0d523daeb60e8b3a6629b94",
+     "qwen2.5-coder-1.5b-graphart-lora": "6bc1c4bb51f088f346dcd8dfc995846644f3289fcda8b545ab712f20890e7375"
+    },
+    "baselines": [
+     "mixed-v2 alone: the same zero_shot replies the pipeline starts from, scored as they are.",
+     "The adapter of the 26 Oct submission (qwen2.5-coder-1.5b-graphart-lora), zero_shot, reply cap 8000.",
+     "Optional, in a separate session: Qwen2.5-Coder 14B (Ollama, Q4) zero_shot, reply cap 8000."
+    ],
+    "comparisons": "Right graphs (scripts/classify_errors.py: exact, notation, spelling or commutative). Pipeline vs the submitted adapter, and pipeline vs mixed-v2 alone: exact McNemar on the discordant samples, n = 17, with Wilson 95% intervals.",
+    "unchanged": "All 17 samples, scored once; the scorer and classifier unchanged; blocks (14) and whole networks (3) reported separately. Nothing is rerun, retuned or re-prompted after the replies are opened; a run that fails or is cut short is reported as it is."
+   }
   ]
  }
 }

@@ -1,0 +1,11 @@
+{
+  "backend": "hf",
+  "model": "qwen2.5-coder-1.5b-graphart-lora-wirer",
+  "prompt": "two_step_brief_nodes_from_mixed-v2",
+  "split": "torchvision",
+  "effort": "high",
+  "n": 21,
+  "cached": 0,
+  "failed": 2,
+  "joined": 19
+}

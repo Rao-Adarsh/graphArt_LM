@@ -1,0 +1,11 @@
+{
+  "backend": "ollama",
+  "model": "qwen2.5-coder:14b",
+  "prompt": "edges_only_cos_nodes_from_shuffled2",
+  "split": "torchvision",
+  "effort": "high",
+  "n": 12,
+  "cached": 0,
+  "failed": 0,
+  "nodes_from": "data/step1_given/reference__shuffled2__torchvision.jsonl"
+}

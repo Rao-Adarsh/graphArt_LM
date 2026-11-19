@@ -46,7 +46,10 @@ def _render(template: str, row: dict) -> str:
     """
     text = template.replace("{code}", row["code"].strip())
     if "{nodes}" in text:
-        text = text.replace("{nodes}", row["target"].split("EDGES")[0].strip())
+        # `given_nodes` (--nodes-from): another model's node list, or the reference's
+        # reordered; otherwise the reference as traced.
+        given = row.get("given_nodes")
+        text = text.replace("{nodes}", node_block(given) if given else row["target"].split("EDGES")[0].strip())
     # The two-step prompts (graphart/two_step.py). Not stripped: the line numbers must
     # be those of the source exactly as it was traced. `step1` is the reference step-1
     # answer when training and the model's own step-1 reply when evaluating.
@@ -56,6 +59,50 @@ def _render(template: str, row: dict) -> str:
         if "{step1_nodes}" in text:
             text = text.replace("{step1_nodes}", two_step.step2_input(row["step1"]))
     return text
+
+
+def node_block(graph: dict) -> str:
+    """A graph's INPUTS/NODES lines, as `{nodes}` shows them (the reference's own text
+    when the graph is the reference)."""
+    from graphart.schema import to_text
+    return to_text({**graph, "edges": []}).split("EDGES")[0].strip()
+
+
+def shuffled(graph: dict, key: str) -> dict:
+    """The same graph with its nodes in a random valid topological order, renumbered:
+    inputs first and the output last as always, everything else in whatever order the
+    dependencies allow -- so parallel branches interleave instead of following each
+    other. Deterministic per `key` (seed and sample id). Used to build node lists for
+    --nodes-from (scripts/make_kaggle_notebook.py), so the reference edges never leave
+    the laptop."""
+    import random
+    rng = random.Random(key)
+    nodes = {n["id"]: n for n in graph["nodes"]}
+    preds = {i: set() for i in nodes}
+    for e in graph["edges"]:
+        preds[e["dst"]].add(e["src"])
+    first = [i for i in nodes if nodes[i]["op"] == "placeholder"]
+    last = [i for i in nodes if nodes[i]["op"] == "output"]
+    order, placed = list(first), set(first)
+    rest = [i for i in nodes if i not in placed and i not in last]
+    while rest:
+        ready = [i for i in rest if preds[i] <= placed]
+        pick = rng.choice(ready)
+        order.append(pick); placed.add(pick); rest.remove(pick)
+    order += last
+    new = {old: k for k, old in enumerate(order)}
+    return {**graph,
+            "nodes": [{**nodes[old], "id": new[old]} for old in order],
+            "edges": sorted(({**e, "src": new[e["src"]], "dst": new[e["dst"]]} for e in graph["edges"]),
+                            key=lambda e: (e["dst"], e["src"]))}
+
+
+def splice(reply: str, given: dict) -> str:
+    """The given nodes followed by the edge list of an edges-only reply: a whole graph
+    the scorer reads as is. Same rule as the scorer's edges mode (pipeline/score.py)."""
+    from graphart.schema import to_text
+    edges = reply.split("EDGES", 1)[1] if "EDGES" in reply else reply
+    return to_text({**given, "edges": []}) + "\n" + edges.strip()
 
 
 def load_split(split: str, tiers: list[int] | None, limit: int | None,
@@ -108,11 +155,36 @@ def main() -> None:
     ap.add_argument("--cached-only", action="store_true",
                     help="rebuild results from replies already on disk; never contacts a "
                          "provider, so it cannot cost anything")
+    ap.add_argument("--nodes-from", metavar="RESULTS_JSONL",
+                    help="edges-only prompts: hand the model the nodes of this run's replies (id, reply) "
+                         "instead of the reference ones -- another model's, or the reference reordered. "
+                         "Samples it has no reply for are left out; each result is those nodes plus the "
+                         "model's edges, scored as a whole graph")
     args = ap.parse_args()
 
     system, user_template = load_prompt(args.prompt)
     rows = load_split(args.split, args.tier, args.limit, args.stratify)
     prompt_name = Path(args.prompt).stem
+    if args.nodes_from:
+        if "{nodes}" not in user_template:
+            raise SystemExit(f"{prompt_name} takes no node list ({{nodes}}); --nodes-from is for edges-only prompts")
+        from graphart.two_step import parse_step1      # bundled on Kaggle; reads the nodes of a whole reply too
+        source = Path(args.nodes_from)
+        replies = {r["id"]: r["reply"] for r in map(json.loads, source.open(encoding="utf-8"))}
+        left_out = [r["id"] for r in rows if r["id"] not in replies]
+        rows = [r for r in rows if r["id"] in replies]
+        if left_out:
+            print(f"  --nodes-from: {len(left_out)} samples have no reply there and are left out", flush=True)
+        for row in rows:
+            try:
+                graph = parse_step1(replies[row["id"]])[0]
+                row["given_nodes"] = {**graph, "edges": []} if graph["nodes"] else None
+            except Exception:
+                row["given_nodes"] = None          # that reply has no readable node list
+            row["given_nodes_missing"] = row["given_nodes"] is None
+        # e.g. hf__qwen2.5-coder-1.5b-graphart-lora-mixed-v2__zero_shot__torchvision -> mixed-v2,
+        #      reference__shuffled1__torchvision -> shuffled1
+        prompt_name += "_nodes_from_" + source.stem.split("__")[1].split("lora-")[-1]
 
     model_name = args.model or DEFAULT_MODELS[args.backend]
     estimate = cost_module.estimate(args.backend, model_name, rows, system, user_template)
@@ -156,6 +228,12 @@ def main() -> None:
     records, cached, failed = [], 0, 0
     for i, row in enumerate(rows, 1):
         cache_file = cache_dir / f"{row['id']}.txt"
+        if row.get("given_nodes_missing"):
+            # Nothing to hand the model: the source reply had no readable nodes. Kept, so
+            # the sample counts as a failure rather than vanishing from the run.
+            records.append({"id": row["id"], "tier": row["tier"], "num_nodes": row["num_nodes"], "reply": "",
+                            "elapsed_s": 0.0, "error": "no readable node list in --nodes-from", "given_nodes": True})
+            continue
         if cache_file.exists() and not args.refresh:
             reply, elapsed, error = cache_file.read_text(encoding="utf-8"), 0.0, None
             cached += 1
@@ -176,8 +254,14 @@ def main() -> None:
             print(f"  [{i}/{len(rows)}] {row['id']} tier {row['tier']} "
                   f"{elapsed:5.1f}s {'FAILED: ' + error if error else ''}", flush=True)
 
-        records.append({"id": row["id"], "tier": row["tier"], "num_nodes": row["num_nodes"],
-                        "reply": reply, "elapsed_s": round(elapsed, 2), "error": error})
+        record = {"id": row["id"], "tier": row["tier"], "num_nodes": row["num_nodes"],
+                  "reply": reply, "elapsed_s": round(elapsed, 2), "error": error}
+        if row.get("given_nodes"):
+            # The nodes came from elsewhere, so `reply` is made a whole graph -- those
+            # nodes plus the model's edges -- and the scorer reads it in full mode.
+            record.update(reply=splice(reply, row["given_nodes"]) if reply else "",
+                          raw_reply=reply, given_nodes=True)
+        records.append(record)
 
     RESULTS.mkdir(exist_ok=True)
     out = RESULTS / f"{run_id}.jsonl"
@@ -187,7 +271,8 @@ def main() -> None:
 
     meta = {"backend": args.backend, "model": (backend.model if backend else model_name), "prompt": prompt_name,
             "split": args.split, "effort": args.effort, "n": len(records),
-            "cached": cached, "failed": failed}
+            "cached": cached, "failed": failed,
+            **({"nodes_from": args.nodes_from} if args.nodes_from else {})}
     (RESULTS / f"{run_id}.meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
     print(f"\n{len(records)} replies ({cached} from cache, {failed} failed) -> {out}")

@@ -35,7 +35,7 @@ import networkx as nx
 from graphart.extract import graph_from_code
 from graphart.generate import generate_program
 from graphart.metrics import compare
-from graphart.render import MISSING, SPURIOUS, compare_figure, draw_graph
+from graphart.render import MISSING, SPURIOUS, compare_figure, draw_graph, figure_height
 from graphart.schema import to_text
 from graphart.validate import node_label, to_networkx
 from pipeline.backends import make_backend
@@ -44,11 +44,24 @@ from pipeline.score import load_truths
 from scripts.classify_errors import classify, parse
 
 ADAPTER = ROOT / "models" / "qwen2.5-coder-1.5b-graphart-lora"
-SAVED_RUN = "hf__qwen2.5-coder-1.5b-graphart-lora__zero_shot"
 OUT = Path(tempfile.mkdtemp(prefix="pensieve_"))
 
 SETS = {"test (our generator)": "test", "torchvision (real code)": "torchvision",
+        "torchvision holdout (frozen, scored once)": "torchvision_holdout",
         "edits (controlled changes)": "edits"}
+
+# The saved answers that can be shown for each set: label -> results/<run>[__<set>].jsonl.
+_LORA = "hf__qwen2.5-coder-1.5b-graphart-lora"
+SUBMITTED = "26 Oct submission (one step)"
+RUNS = {
+    SUBMITTED: f"{_LORA}__zero_shot",
+    "mixed-v2 alone (one step)": f"{_LORA}-mixed-v2__zero_shot",
+    "final pipeline: mixed-v2 nodes + 1.5B wirer": f"{_LORA}-wirer__two_step_brief_nodes_from_mixed-v2",
+    "mixed-v2 nodes + 14B wirer (E1)": "ollama__qwen2.5-coder-14b__edges_only_cos_nodes_from_mixed-v2",
+    "1.5B wirer on the true nodes (E4 diagnostic)": f"{_LORA}-wirer__two_step_brief_nodes_from_truenodes",
+    "two-step, brief": f"{_LORA}-two-step__two_step_brief",
+    "Qwen 14B zero-shot": "ollama__qwen2.5-coder-14b__zero_shot",
+}
 
 CATEGORY_TEXT = {
     "exact": "Exactly the graph torch.fx traces.",
@@ -75,8 +88,15 @@ def _jsonl(path: Path) -> list[dict]:
 
 DATA = {s: {r["id"]: r for r in _jsonl(ROOT / "data" / "generated" / f"{s}.jsonl")} for s in SETS.values()}
 TRUTHS = {s: load_truths(s) for s, rows in DATA.items() if rows}
-SAVED = {s: {r["id"]: r["reply"] for r in _jsonl(ROOT / "results" / (
-             f"{SAVED_RUN}.jsonl" if s == "test" else f"{SAVED_RUN}__{s}.jsonl"))} for s in SETS.values()}
+# set -> run label -> sample id -> reply; only the runs that exist for that set
+SAVED = {s: {label: replies for label, run in RUNS.items()
+             if (replies := {r["id"]: r["reply"] for r in _jsonl(
+                 ROOT / "results" / (f"{run}.jsonl" if s == "test" else f"{run}__{s}.jsonl"))})}
+         for s in SETS.values()}
+
+
+def run_labels(set_label: str) -> list[str]:
+    return list(SAVED[SETS[set_label]])
 
 
 TIERS = {"1 flat: one layer per line": 1, "2 loops: Sequential, ModuleList, loops": 2,
@@ -117,7 +137,7 @@ def example_ids(set_label: str) -> list[str]:
     """The examples that have a saved answer: the 40 stratified test programs, all of
     torchvision, all of the edits."""
     split = SETS[set_label]
-    return [i for i in DATA[split] if i in SAVED[split]]
+    return [i for i in DATA[split] if any(i in replies for replies in SAVED[split].values())]
 
 
 # --------------------------------------------------------------------------
@@ -143,7 +163,7 @@ def _figure(truth: dict | None, pred: dict | None) -> str:
         compare_figure(truth, pred, path=str(path))
         return str(path)
     graph, style, label = (pred, SPURIOUS, "model output") if pred else (truth, MISSING, "reference only")
-    fig, ax = plt.subplots(figsize=(7, max(5.0, 0.35 * len(graph["nodes"]) + 2)))
+    fig, ax = plt.subplots(figsize=(7, figure_height(graph)))
     draw_graph(graph, ax, bad_style=style, title=label)
     fig.savefig(path, dpi=160, bbox_inches="tight")
     plt.close(fig)
@@ -165,7 +185,7 @@ def _metrics(scores: dict | None, category: str | None) -> list[list]:
             ["valid (well-formed DAG, consistent shapes)", yes(scores["valid"])]]
 
 
-def run(code: str, use_saved: bool, example: dict | None):
+def run(code: str, use_saved: bool, run_label: str | None, example: dict | None):
     """Generator: a status line first, then the full result."""
     code = (code or "").strip()
     if not code:
@@ -182,17 +202,25 @@ def run(code: str, use_saved: bool, example: dict | None):
         except Exception as exc:          # pasted code: anything can go wrong
             trace_error = f"{type(exc).__name__}: {exc}"
 
-    reply = SAVED[example["split"]].get(example["id"]) if (from_example and use_saved) else None
-    source = "answer saved during the experiments"
+    reply = None
+    if from_example and use_saved:
+        saved = SAVED[example["split"]].get(run_label or "", {})
+        if example["id"] not in saved:
+            raise gr.Error(f"No saved answer from '{run_label}' for {example['id']} -- pick another model, "
+                           "or untick the box to run the 26 Oct adapter live.")
+        reply = saved[example["id"]]
+    source = f"saved answer of **{run_label}**"
     if reply is None:
-        yield "Running the fine-tuned model on the CPU -- about 1-3 minutes ...", None, None, "", "", ""
+        if example and example.get("split") == "torchvision_holdout":
+            raise gr.Error("The holdout is scored once: only the saved answers are shown for it.")
+        yield "Running the 26 Oct adapter on the CPU -- about 1-3 minutes ...", None, None, "", "", ""
         system, user = load_prompt("zero_shot")
         t = time.time()
         try:
             reply = model()(system, _render(user, {"code": code}))
         except Exception as exc:
             raise gr.Error(f"The model could not answer: {exc}")
-        source = f"live answer, {time.time() - t:.0f} s"
+        source = f"live answer of the 26 Oct adapter, {time.time() - t:.0f} s"
 
     pred, parse_error = parse(reply)
     scores = compare(pred, truth) if (pred and truth) else None
@@ -251,6 +279,8 @@ with gr.Blocks(title="Pensieve graph interface") as demo:
             with gr.Tab("Examples"):
                 ex_set = gr.Dropdown(list(SETS), value="test (our generator)", label="set")
                 ex_id = gr.Dropdown(example_ids("test (our generator)"), label="example")
+                ex_run = gr.Dropdown(run_labels("test (our generator)"), value=SUBMITTED,
+                                     label="saved answer from")
             with gr.Tab("Generate"):
                 gen_tier = gr.Dropdown(list(TIERS), value=list(TIERS)[2], label="tier")
                 gen_seed = gr.Number(None, precision=0, label="seed (empty: random)")
@@ -270,11 +300,21 @@ with gr.Blocks(title="Pensieve graph interface") as demo:
                 ref_text = gr.Code(label="reference (torch.fx)", lines=12)
                 reply_text = gr.Code(label="model reply", lines=12)
 
-    ex_set.change(lambda s: gr.update(choices=example_ids(s), value=None), ex_set, ex_id)
+    ex_set.change(lambda s: (gr.update(choices=example_ids(s), value=None),
+                             gr.update(choices=run_labels(s), value=run_labels(s)[-1 if "holdout" in s else 0])),
+                  ex_set, [ex_id, ex_run])
     ex_id.change(load_example, [ex_set, ex_id], [code, example_state])
     upload.change(load_file, upload, [code, example_state])
     gen_go.click(generate, [gen_tier, gen_seed], [code, example_state, gen_note])
-    go.click(run, [code, use_saved, example_state], [status, image, metrics, verdict, ref_text, reply_text])
+    outputs = [status, image, metrics, verdict, ref_text, reply_text]
+    go.click(run, [code, use_saved, ex_run, example_state], outputs)
+    # switching model on a loaded example of the chosen set redraws at once
+    def redraw(code_, use_saved_, run_label, example, set_label):
+        if not (example and code_ and example["split"] == SETS[set_label] and use_saved_):
+            yield tuple(gr.update() for _ in outputs)
+            return
+        yield from run(code_, use_saved_, run_label, example)
+    ex_run.change(redraw, [code, use_saved, ex_run, example_state, ex_set], outputs)
 
 
 if __name__ == "__main__":

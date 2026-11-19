@@ -144,10 +144,11 @@ LONG_PROMPTS, LONG_SETS = ("cot", "cos"), ("torchvision", "torchvision_holdout")
 
 
 def job(model: str, prompt: str, split: str = "test", stratify: int | None = STRATIFY,
-        max_tokens: int | None = None, num_ctx: int | None = None) -> dict:
+        max_tokens: int | None = None, num_ctx: int | None = None, extra: list[str] | None = None) -> dict:
     long = prompt in LONG_PROMPTS or split in LONG_SETS
-    return {"model": model, "prompt": prompt, "split": split, "stratify": stratify,
-            "max_tokens": max_tokens or (4096 if long else None), "num_ctx": num_ctx}
+    out = {"model": model, "prompt": prompt, "split": split, "stratify": stratify,
+           "max_tokens": max_tokens or (4096 if long else None), "num_ctx": num_ctx}
+    return out | ({"extra": extra} if extra else {})     # more run_prompting flags
 
 
 def config(jobs: list[dict], hours: float = 11.0) -> str:
@@ -269,6 +270,8 @@ for j in ([] if SMOKE_ONLY else JOBS):
         cmd += ["--num-ctx", str(j["num_ctx"])]
     if j.get("limit"):                      # for trying a notebook on a few samples
         cmd += ["--limit", str(j["limit"])]
+    cmd += j.get("extra", [])                # e.g. --nodes-from, --shuffle-nodes
+    name += f" {' '.join(j.get('extra', []))}"
     print(f"\\n##### {name}   ({remaining() / 3600:.1f} h left)", flush=True)
     try:
         # Cached replies survive a timeout; a later session would only redo the rest.
@@ -1063,22 +1066,24 @@ package()
 """), ("7. Score it: both jobs at once, one per GPU", """
 adapter = REPO / "lora" / ADAPTER
 jobs = []
-for i, (split, cap) in enumerate(EVALS):
+# An EVALS entry is (data set, reply cap) or (data set, reply cap, extra flags, name).
+for i, (split, cap, *more) in enumerate(EVALS):
+    extra, name = (more[0], more[1]) if more else ([], split)
     cmd = [sys.executable, "-m", "pipeline.run_two_step", "--backend", "hf", "--model", str(adapter),
            "--split", split, "--max-tokens", str(cap), *(["--stratify", "10"] if split == "test" else []),
-           *EVAL_ARGS]
-    log = open(LOGS / f"score_{split}.log", "w")
-    print(f"##### {split} on GPU {i % GPUS}   ({remaining() / 3600:.1f} h left)", flush=True)
-    jobs.append((split, log, subprocess.Popen(cmd, env=dict(ONE_GPU, CUDA_VISIBLE_DEVICES=str(i % GPUS)),
-                                              stdout=log, stderr=subprocess.STDOUT)))
-for split, log, proc in jobs:
+           *extra, *EVAL_ARGS]
+    log = open(LOGS / f"score_{name}.log", "w")
+    print(f"##### {name} on GPU {i % GPUS}   ({remaining() / 3600:.1f} h left)", flush=True)
+    jobs.append((name, log, subprocess.Popen(cmd, env=dict(ONE_GPU, CUDA_VISIBLE_DEVICES=str(i % GPUS)),
+                                             stdout=log, stderr=subprocess.STDOUT)))
+for name, log, proc in jobs:
     try:
         proc.wait(timeout=max(remaining() - 180, 60))
     except subprocess.TimeoutExpired:
         proc.kill()
-        print(f"{split}: stopped by the time budget -- the finished replies are kept", flush=True)
+        print(f"{name}: stopped by the time budget -- the finished replies are kept", flush=True)
     log.close()
-    print(f"\\n##### {split} (exit {proc.returncode})\\n" + (LOGS / f"score_{split}.log").read_text(), flush=True)
+    print(f"\\n##### {name} (exit {proc.returncode})\\n" + (LOGS / f"score_{name}.log").read_text(), flush=True)
     package()
 for meta in sorted((REPO / "results").glob("*.meta.json")):
     m = json.loads(meta.read_text())
@@ -1307,6 +1312,247 @@ print(f"done in {(time.time() - START) / 3600:.1f} h -- download graphart_hf_eva
 
 
 # ---------------------------------------------------------------------------
+# E2 (docs/experiments.md): the controlled-edit set (RQ5) on a one-step and a two-step
+# adapter, both right on all 40 test programs. Does writing each edge with the variable it
+# is read from make answers follow edited code? Phase 2's one-step adapter answered 68%
+# (47/69) of meaningful edits with the graph of the unedited program. One adapter per GPU,
+# side by side: 193 programs at ~14 s each, ~45 min, ~1 h with the setup.
+EDITS_TWO_ADAPTER_CONFIG = (
+    'BASE_MODEL = "Qwen/Qwen2.5-Coder-1.5B-Instruct"; SPLIT = "edits"; '
+    'JOBS = [("qwen2.5-coder-1.5b-graphart-lora-mixed-v2", "pipeline.run_prompting", ["--prompt", "zero_shot"]), '
+    '("qwen2.5-coder-1.5b-graphart-lora-two-step", "pipeline.run_two_step", ["--brief", "--max-tokens", "3000"])]; '
+    'TIME_BUDGET_HOURS = 1.5; EVAL_ARGS = []; VALIDATE_ONLY = False')
+
+EDITS_TWO_ADAPTER_NOTES = """
+# BASE_MODEL   the base both adapters were tuned from.
+# SPLIT        the 193 controlled edits of the test programs (124 neutral, 69 meaningful).
+# JOBS         (adapter folder name, runner, its flags), one per GPU, run side by side, each
+#              with the settings its test-split run used: mixed-v2 one step (zero_shot,
+#              default cap), and the brief two-step adapter (both steps, 3000 per call).
+# EVAL_ARGS    extra flags for both runners, e.g. ["--limit", "5"] to try the notebook.
+# VALIDATE_ONLY True: only check the code arrived intact (works on a CPU session).
+"""
+
+EDITS_TWO_ADAPTER_INTRO = """
+# graphArt_LM: controlled edits, one-step vs two-step (evaluation only)
+
+Runs two fine-tuned 1.5B adapters on the 193 controlled edits of the test programs, one
+on each T4 at the same time: `mixed-v2` (whole graph in one reply) and the brief
+`two-step` adapter (nodes, then edges with the variable each input is read from). No
+training. About 1 hour, capped at 1.5.
+
+**Before running**: *GPU T4 x2* (both are used), *Internet on*, and **both adapters
+attached under Input** (*Add Input* -> your datasets): `qwen2.5-coder-1.5b-graphart-lora-mixed-v2`
+and `qwen2.5-coder-1.5b-graphart-lora-two-step` (the zips in `dist/`, uploaded as datasets).
+Check the Input panel lists both before saving. Then *Save Version -> Save & Run All (Commit)*.
+
+**When it finishes**, download `graphart_edits_eval.zip` from the *Output* tab.
+
+Generated by `scripts/make_kaggle_notebook.py --edits-two-adapter`. Edit that script, not this file.
+"""
+
+
+def edits_two_adapter_cells(b64: str, digest: str) -> list[tuple[str, str]]:
+    unpack, install, download = finetune_cells(b64, digest)[:3]
+    return [unpack, install, download, ("4. Two GPUs, and both uploaded adapters", """
+import zipfile
+
+n = int(subprocess.run([sys.executable, "-c", "import torch; print(torch.cuda.device_count())"],
+                       capture_output=True, text=True).stdout.strip() or 0)
+print(f"{n} GPU(s) visible", flush=True)
+if n < len(JOBS):
+    raise SystemExit(f"{len(JOBS)} jobs need {len(JOBS)} GPUs, this session has {n} -- set GPU T4 x2")
+INPUT = Path(os.environ.get("GRAPHART_INPUT", "/kaggle/input"))
+LOGS = REPO / "logs"
+LOGS.mkdir(exist_ok=True)
+
+def remaining():
+    return TIME_BUDGET_HOURS * 3600 - (time.time() - START)
+
+def package():
+    with zipfile.ZipFile(WORK / "graphart_edits_eval.zip", "w", zipfile.ZIP_DEFLATED) as z:
+        for root in (REPO / "results", LOGS):
+            for p in root.rglob("*") if root.exists() else []:
+                if p.is_file():
+                    z.write(p, p.relative_to(REPO))
+
+# Each adapter by its exact folder name (os.walk with followlinks: Kaggle may mount inputs
+# through links, which Path.rglob does not follow on Python 3.13).
+found = {Path(d).name: Path(d) for d, _, files in os.walk(INPUT, followlinks=True)
+         if "adapter_config.json" in files and "adapter_model.safetensors" in files} if INPUT.exists() else {}
+missing = [name for name, _, _ in JOBS if name not in found]
+if missing:
+    print(f"adapters found: {sorted(found)}")
+    for d, dirs, files in os.walk(INPUT, followlinks=True):
+        if d.count(os.sep) - str(INPUT).count(os.sep) <= 3:
+            print(f"  {d}: {sorted(dirs)[:10]} {sorted(files)[:10]}")
+    raise SystemExit(f"missing adapter(s) {missing} under /kaggle/input -- attach them as inputs (see the top)")
+for name, _, _ in JOBS:
+    cfg = json.loads((found[name] / "adapter_config.json").read_text())
+    if cfg.get("base_model_name_or_path") != BASE_MODEL:
+        raise SystemExit(f"{name} was tuned from {cfg.get('base_model_name_or_path')}, not {BASE_MODEL}")
+    shutil.copytree(found[name], REPO / "lora" / name, dirs_exist_ok=True)
+    print(f"using {name}", flush=True)
+"""), ("5. Both adapters at once, one per GPU", """
+ENV = dict(os.environ, HF_HUB_OFFLINE="1", PYTHONUNBUFFERED="1")
+running = []
+for gpu, (name, runner, flags) in enumerate(JOBS):
+    cmd = [sys.executable, "-m", runner, "--backend", "hf", "--model", str(REPO / "lora" / name),
+           "--split", SPLIT, *flags, *EVAL_ARGS]
+    log = open(LOGS / f"{name}.log", "w")
+    print(f"##### {name} on GPU {gpu}: {' '.join(cmd[2:])}", flush=True)
+    running.append((name, log, subprocess.Popen(cmd, env=dict(ENV, CUDA_VISIBLE_DEVICES=str(gpu)),
+                                                stdout=log, stderr=subprocess.STDOUT)))
+for name, log, proc in running:
+    try:
+        proc.wait(timeout=max(remaining() - 180, 60))
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        print(f"{name}: stopped by the time budget -- the finished replies are cached, not written", flush=True)
+    log.close()
+    text = (LOGS / f"{name}.log").read_text()
+    print(f"\\n##### {name} (exit {proc.returncode}), last lines:\\n" + "\\n".join(text.splitlines()[-15:]), flush=True)
+    package()
+for meta in sorted((REPO / "results").glob("*.meta.json")):
+    m = json.loads(meta.read_text())
+    print(f"{meta.stem:80s} n={m['n']} failed={m['failed']}")
+print(f"done in {(time.time() - START) / 3600:.1f} h -- download graphart_edits_eval.zip")
+""")]
+
+
+# ---------------------------------------------------------------------------
+# The frozen holdout, scored once (data/generated/FROZEN.json, amendment of 2026-11-15).
+# GPU 0: mixed-v2 answers, then the wirer is handed mixed-v2's nodes -- the final pipeline.
+# GPU 1: the adapter of the 26 Oct submission. mixed-v2 alone is a baseline for free.
+
+HOLDOUT_MIXED_V2 = "results/hf__qwen2.5-coder-1.5b-graphart-lora-mixed-v2__zero_shot__torchvision_holdout.jsonl"
+HOLDOUT_CONFIG = (
+    'BASE_MODEL = "Qwen/Qwen2.5-Coder-1.5B-Instruct"; SPLIT = "torchvision_holdout"; LANES = ['
+    '[("qwen2.5-coder-1.5b-graphart-lora-mixed-v2", "pipeline.run_prompting", ["--prompt", "zero_shot", "--max-tokens", "8000"]), '
+    '("qwen2.5-coder-1.5b-graphart-lora-wirer", "pipeline.run_two_step", ["--brief", "--max-tokens", "8000", '
+    f'"--step1-from", "{HOLDOUT_MIXED_V2}"])], '
+    '[("qwen2.5-coder-1.5b-graphart-lora", "pipeline.run_prompting", ["--prompt", "zero_shot", "--max-tokens", "8000"])]]; '
+    'TIME_BUDGET_HOURS = 2.0; EVAL_ARGS = []; VALIDATE_ONLY = False')
+
+HOLDOUT_NOTES = """
+# BASE_MODEL   the base all three adapters were tuned from.
+# SPLIT        the 17 frozen holdout samples (data/generated/FROZEN.json). Scored ONCE.
+# LANES        one list per GPU, run side by side; the steps of a lane run in order.
+#              GPU 0, the final pipeline: mixed-v2 (zero_shot), then the wirer handed
+#              mixed-v2's node lists. GPU 1: the adapter of the 26 Oct submission.
+#              Reply caps 8000, as the protocol fixes (the longest reference is 7220).
+# EVAL_ARGS    leave empty: the protocol scores all 17.
+# VALIDATE_ONLY True: only check the code arrived intact (works on a CPU session).
+"""
+
+HOLDOUT_INTRO = """
+# graphArt_LM: the frozen torchvision holdout, scored once
+
+17 real torchvision blocks and networks that nothing was tuned on (frozen 31 Oct). Three
+fine-tuned 1.5B adapters, no training:
+- **GPU 0, the final pipeline**: `mixed-v2` writes the graph; its node list goes to the
+  `wirer`, which writes the edges.
+- **GPU 1, the previous submission**: the adapter of 26 Oct.
+
+About 1 hour, capped at 2. **Run it once.** If it fails, do not re-run: send the log.
+
+**Before running**: *GPU T4 x2*, *Internet on*, and **three adapters attached under Input**
+(*Add Input* -> your datasets), uploaded from the zips in `dist/`:
+`qwen2.5-coder-1.5b-graphart-lora-mixed-v2`, `qwen2.5-coder-1.5b-graphart-lora-wirer` and
+`qwen2.5-coder-1.5b-graphart-lora`. Check the Input panel lists all three. Then
+*Save Version -> Save & Run All (Commit)*, and download `graphart_holdout.zip` from *Output*.
+
+Generated by `scripts/make_kaggle_notebook.py --holdout`. Edit that script, not this file.
+"""
+
+
+def holdout_cells(b64: str, digest: str) -> list[tuple[str, str]]:
+    unpack, install, download = finetune_cells(b64, digest)[:3]
+    return [unpack, install, download, ("4. Two GPUs, and the three uploaded adapters", """
+import threading, zipfile
+
+n = int(subprocess.run([sys.executable, "-c", "import torch; print(torch.cuda.device_count())"],
+                       capture_output=True, text=True).stdout.strip() or 0)
+print(f"{n} GPU(s) visible", flush=True)
+if n < len(LANES):
+    raise SystemExit(f"{len(LANES)} lanes need {len(LANES)} GPUs, this session has {n} -- set GPU T4 x2")
+INPUT = Path(os.environ.get("GRAPHART_INPUT", "/kaggle/input"))
+LOGS = REPO / "logs"
+LOGS.mkdir(exist_ok=True)
+ADAPTERS = list(dict.fromkeys(name for lane in LANES for name, _, _ in lane))
+
+def remaining():
+    return TIME_BUDGET_HOURS * 3600 - (time.time() - START)
+
+def package():
+    with zipfile.ZipFile(WORK / "graphart_holdout.zip", "w", zipfile.ZIP_DEFLATED) as z:
+        for root in (REPO / "results", LOGS):
+            for p in root.rglob("*") if root.exists() else []:
+                if p.is_file():
+                    z.write(p, p.relative_to(REPO))
+
+# Each adapter by its exact folder name (os.walk with followlinks: Kaggle may mount inputs
+# through links, which Path.rglob does not follow on Python 3.13).
+found = {Path(d).name: Path(d) for d, _, files in os.walk(INPUT, followlinks=True)
+         if "adapter_config.json" in files and "adapter_model.safetensors" in files} if INPUT.exists() else {}
+missing = [name for name in ADAPTERS if name not in found]
+if missing:
+    print(f"adapters found: {sorted(found)}")
+    for d, dirs, files in os.walk(INPUT, followlinks=True):
+        if d.count(os.sep) - str(INPUT).count(os.sep) <= 3:
+            print(f"  {d}: {sorted(dirs)[:10]} {sorted(files)[:10]}")
+    raise SystemExit(f"missing adapter(s) {missing} under /kaggle/input -- attach them as inputs (see the top). "
+                     "Nothing has been scored, so it is safe to fix and run again.")
+for name in ADAPTERS:
+    cfg = json.loads((found[name] / "adapter_config.json").read_text())
+    if cfg.get("base_model_name_or_path") != BASE_MODEL:
+        raise SystemExit(f"{name} was tuned from {cfg.get('base_model_name_or_path')}, not {BASE_MODEL}")
+    shutil.copytree(found[name], REPO / "lora" / name, dirs_exist_ok=True)
+    print(f"using {name}", flush=True)
+"""), ("5. Score the holdout: one lane per GPU", """
+ENV = dict(os.environ, HF_HUB_OFFLINE="1", PYTHONUNBUFFERED="1")
+codes = {}
+
+def run_lane(gpu, lane):
+    for name, runner, flags in lane:
+        flags = [str(REPO / f) if f.startswith("results/") else f for f in flags]
+        given = [f for f in flags if f.endswith(".jsonl")]
+        if given and not Path(given[0]).exists():
+            codes[name] = "skipped: no node lists to hand it"
+            continue
+        if remaining() < 300:
+            codes[name] = "skipped: out of time"
+            continue
+        cmd = [sys.executable, "-m", runner, "--backend", "hf", "--model", str(REPO / "lora" / name),
+               "--split", SPLIT, *flags, *EVAL_ARGS]
+        print(f"##### {name} on GPU {gpu}: {' '.join(cmd[2:])}", flush=True)
+        with open(LOGS / f"{name}.log", "w") as log:
+            proc = subprocess.Popen(cmd, env=dict(ENV, CUDA_VISIBLE_DEVICES=str(gpu)),
+                                    stdout=log, stderr=subprocess.STDOUT)
+            try:
+                codes[name] = proc.wait(timeout=max(remaining() - 180, 60))
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                codes[name] = "stopped by the time budget"
+        print(f"##### {name}: {codes[name]}", flush=True)
+
+threads = [threading.Thread(target=run_lane, args=(gpu, lane)) for gpu, lane in enumerate(LANES)]
+for t in threads:
+    t.start()
+for t in threads:
+    t.join()
+for name in ADAPTERS:
+    text = (LOGS / f"{name}.log").read_text() if (LOGS / f"{name}.log").exists() else ""
+    print(f"\\n##### {name} ({codes.get(name)}), last lines:\\n" + "\\n".join(text.splitlines()[-8:]), flush=True)
+package()
+for meta in sorted((REPO / "results").glob("*.meta.json")):
+    m = json.loads(meta.read_text())
+    print(f"{meta.stem:80s} n={m['n']} failed={m['failed']}")
+print(f"done in {(time.time() - START) / 3600:.1f} h -- download graphart_holdout.zip")
+""")]
+
+
+# ---------------------------------------------------------------------------
 # Evaluation only, the uploaded (brief-prompt) two-step adapter: step 2 handed mixed-v2's
 # node lists instead of its own step 1 -- how many graphs step 2 delivers from good nodes,
 # and so how much a better step 1 is worth.
@@ -1315,6 +1561,124 @@ print(f"done in {(time.time() - START) / 3600:.1f} h -- download graphart_hf_eva
 # when the results are packaged -- and the input is not a result of this run anyway.
 MIXED_V2_TV = "results/hf__qwen2.5-coder-1.5b-graphart-lora-mixed-v2__zero_shot__torchvision.jsonl"
 MIXED_V2_TV_BUNDLED = "data/step1_given/hf__qwen2.5-coder-1.5b-graphart-lora-mixed-v2__zero_shot__torchvision.jsonl"
+
+# E1 and E3 (docs/experiments.md, "Where this leaves the plan"). E1: the 14B's CoS wiring
+# handed mixed-v2's node lists, which are right on 15 of 21 -- do the best node lister
+# and the best wirer compose? (ceiling 13: node-right there AND wired right on true nodes).
+# E3: CoS wiring on the true nodes listed in a random valid topological order, so parallel
+# branches interleave -- does it track variables, or lean on the listing order? The
+# reordered lists are made here (shuffled_node_files), so no reference edges go to
+# Kaggle; only the 11 samples whose order can change, two seeds. ~16 tok/s: E1 ~45 min,
+# each E3 seed ~30 min.
+SHUFFLE_SEEDS = (1, 2)
+SHUFFLED_BUNDLED = "data/step1_given/reference__shuffled{seed}__torchvision.jsonl"
+PROBE_14B_COMPOSE_JOBS = [
+    job("qwen2.5-coder:14b", "edges_only_cos", "torchvision", None, 6000, num_ctx=16384,
+        extra=["--nodes-from", MIXED_V2_TV_BUNDLED]),
+    *(job("qwen2.5-coder:14b", "edges_only_cos", "torchvision", None, 6000, num_ctx=16384,
+          extra=["--nodes-from", SHUFFLED_BUNDLED.format(seed=seed)]) for seed in SHUFFLE_SEEDS),
+]
+
+
+def shuffled_node_files(split: str = "torchvision") -> dict[str, bytes]:
+    """The reference node lists in a random valid topological order (one file per seed,
+    as `--nodes-from` reads them: id and reply), for the samples whose order changes."""
+    from pipeline.run_prompting import node_block, shuffled
+    rows = load_split(split, None, None, None)
+    out = {}
+    for seed in SHUFFLE_SEEDS:
+        lines = [json.dumps({"id": r["id"], "reply": node_block(g)}) for r in rows
+                 if (g := shuffled(r["graph"], f"{seed}:{r['id']}"))["nodes"] != r["graph"]["nodes"]]
+        out[SHUFFLED_BUNDLED.format(seed=seed)] = "".join(line + "\n" for line in lines).encode("utf-8")
+    return out
+
+PROBE_14B_COMPOSE_INTRO = """
+# graphArt_LM: composing node lists and CoS wiring (Qwen 14B, torchvision 21)
+
+Three jobs, inference only, on Ollama:
+1. **E1**: the 14B wires the graph with the CoS prompt, handed the node lists that the
+   fine-tuned 1.5B (mixed-v2) wrote, instead of the true ones.
+2. **E3**: the same prompt on the true nodes, listed in a random valid order so parallel
+   branches interleave (two seeds; only the 11 samples whose order can change).
+
+About 1.75 hours, capped at 2.5. Scoring happens on the laptop.
+
+**Before running**: *GPU T4 x2*, *Internet on*. No inputs. Then
+*Save Version -> Save & Run All (Commit)*. When it finishes, download
+`graphart_results.zip` from the *Output* tab.
+
+Generated by `scripts/make_kaggle_notebook.py --probe-14b-compose`. Edit that script, not this file.
+"""
+
+# ---------------------------------------------------------------------------
+# E4 (docs/experiments.md): a 1.5B wirer -- step 2 alone, trained on stack-free reference
+# node lists -- then handed mixed-v2's node lists. E1 got 13/21 doing this with the 14B;
+# can a 1.5B do it, and does a variable-tagged wirer, unlike the 14B (E3), survive a
+# reordered node list?
+
+MIXED_V2_TEST = "results/hf__qwen2.5-coder-1.5b-graphart-lora-mixed-v2__zero_shot.jsonl"
+MIXED_V2_TEST_BUNDLED = "data/step1_given/hf__qwen2.5-coder-1.5b-graphart-lora-mixed-v2__zero_shot.jsonl"
+TRUE_NODES_BUNDLED = "data/step1_given/reference__truenodes__torchvision.jsonl"
+
+
+def true_node_file(split: str = "torchvision") -> dict[str, bytes]:
+    """The reference node lists in the traced order, no edges, as `--step1-from` reads them."""
+    from pipeline.run_prompting import node_block
+    rows = load_split(split, None, None, None)
+    return {TRUE_NODES_BUNDLED: "".join(json.dumps({"id": r["id"], "reply": node_block(r["graph"])}) + "\n"
+                                        for r in rows).encode("utf-8")}
+
+
+def _wirer_eval(split: str, nodes: str, name: str) -> str:
+    return f'("{split}", 3000, ["--brief", "--step1-from", "{nodes}"], "{name}")'
+
+
+E4_WIRER_CONFIG = (
+    'BASE_MODEL = "Qwen/Qwen2.5-Coder-1.5B-Instruct"; ADAPTER = "qwen2.5-coder-1.5b-graphart-lora-wirer"; '
+    'EPOCHS = 1.0; GPUS = 2; EFFECTIVE_BATCH = 16; TRAIN_ARGS = ["--wirer", "--train-split", "train/2,large_train", '
+    '"--val-split", "val/8,large_val/2", "--max-len", "4096", "--drop-over-max", "--eval-steps", "20"]; '
+    'FALLBACK_MAX_LEN = 3072; MEMORY_CHECK = 6; SMOKE_STEPS = 8; EVALS = ['
+    + ", ".join([_wirer_eval("torchvision", MIXED_V2_TV_BUNDLED, "tv_mixed-v2_nodes"),
+                 _wirer_eval("test", MIXED_V2_TEST_BUNDLED, "test_mixed-v2_nodes"),
+                 _wirer_eval("torchvision", TRUE_NODES_BUNDLED, "tv_true_nodes"),
+                 *(_wirer_eval("torchvision", SHUFFLED_BUNDLED.format(seed=s), f"tv_shuffled{s}")
+                   for s in SHUFFLE_SEEDS)])
+    + ']; EVAL_RESERVE_HOURS = 0.5; TIME_BUDGET_HOURS = 2.0; EVAL_ARGS = []; VALIDATE_ONLY = False')
+
+E4_WIRER_NOTES = """
+# BASE_MODEL   tuned from scratch (a fresh LoRA), like every earlier session.
+# ADAPTER      its name; results land in results/hf__<ADAPTER>__two_step_brief_nodes_from_*.jsonl.
+# TRAIN_ARGS   --wirer: step 2 only, one example per program -- the brief edges prompt given
+#              the reference nodes WITHOUT stacks, as a one-step model lists them. The same
+#              programs as the brief two-step adapter: every 2nd tier 1-4 program, all of 5-6.
+#              ~1,150 tokens an example (max ~4,000): about 80 steps, ~35 min on two T4s.
+# EVALS        (data set, reply cap, flags, name), each step 2 only, handed a node file:
+#              mixed-v2's replies on torchvision (E4) and on the 40 test programs; the true
+#              nodes; the true nodes in two random valid orders (as in E3, 11-12 samples).
+#              Five jobs, alternating between the two GPUs.
+# TIME_BUDGET  the whole session; training stops early to leave EVAL_RESERVE_HOURS for EVALS.
+# VALIDATE_ONLY True: only check the code arrived intact (works on a CPU session).
+"""
+
+E4_WIRER_INTRO = """
+# graphArt_LM: E4, a 1.5B wirer for mixed-v2's node lists
+
+Trains a fresh LoRA on step 2 alone -- wiring a given node list, each input tagged with the
+variable it is read from -- on node lists without stacks, then hands it the node lists the
+one-step mixed-v2 model wrote. The 14B did this at 13/21 (E1); the question is whether the
+1.5B can, so that the whole pipeline is two small adapters.
+
+Also scored: the true node lists, and the true nodes in a random valid order (does it track
+variables, or lean on the order, as the 14B did?).
+
+About 1.3 hours on both T4s, capped at 2. Scoring happens on the laptop.
+
+**Before running**: *GPU T4 x2*, *Internet on*. **No inputs.** Then
+*Save Version -> Save & Run All (Commit)*. When it finishes, download
+`graphart_e4_wirer.zip` from the *Output* tab.
+
+Generated by `scripts/make_kaggle_notebook.py --e4-wirer`. Edit that script, not this file.
+"""
 
 # Step 2 alone is ~600 tokens a program at ~24 tok/s: ~10 min, ~25 with the setup.
 TWO_STEP_EVAL_CONFIG = (
@@ -1402,6 +1766,18 @@ def main() -> None:
                          "and re-prompted with the full rules; no training)")
     ap.add_argument("--probe-14b-nodes", action="store_true",
                     help="build notebooks/kaggle_probe_14b_nodes.ipynb (14B: CoS edges given nodes, better nodes)")
+    ap.add_argument("--edits-two-adapter", action="store_true",
+                    help="build notebooks/kaggle_edits_two_adapter.ipynb (E2: the edit set on the mixed-v2 "
+                         "and brief two-step adapters, one per GPU)")
+    ap.add_argument("--probe-14b-compose", action="store_true",
+                    help="build notebooks/kaggle_probe_14b_compose.ipynb (E1: 14B CoS wiring on mixed-v2's "
+                         "nodes; E3: on the true nodes reordered)")
+    ap.add_argument("--holdout", action="store_true",
+                    help="build notebooks/kaggle_holdout.ipynb (the frozen holdout, scored once: the final "
+                         "pipeline and the submitted adapter)")
+    ap.add_argument("--e4-wirer", action="store_true",
+                    help="build notebooks/kaggle_e4_wirer.ipynb (E4: train a 1.5B step-2 wirer on both T4s, "
+                         "score it on mixed-v2's, true and reordered node lists)")
     ap.add_argument("--probe-14b", action="store_true",
                     help="build notebooks/kaggle_probe_14b.ipynb (14B edges_only, nodes_only, cos on torchvision)")
     args = ap.parse_args()
@@ -1493,6 +1869,56 @@ def main() -> None:
         nb = notebook(HF_EVAL_CONFIG, hf_eval_cells(b64, digest), n, intro=HF_EVAL_INTRO, notes=HF_EVAL_NOTES)
         nb_path.write_text(json.dumps(nb, indent=1) + "\n", encoding="utf-8")
         print(f"wrote {nb_path.relative_to(ROOT)} (bundle {len(b64) / 1024:.0f} KB, sha256 {digest[:12]})")
+        return
+
+    if args.edits_two_adapter:
+        files, n = payload()
+        for rel in TWO_STEP_CODE:                      # the two-step runner and its reader
+            files[rel] = (ROOT / rel).read_bytes()
+        b64, digest = bundle(files)
+        nb_path = OUT_DIR / "kaggle_edits_two_adapter.ipynb"
+        nb = notebook(EDITS_TWO_ADAPTER_CONFIG, edits_two_adapter_cells(b64, digest), n,
+                      intro=EDITS_TWO_ADAPTER_INTRO, notes=EDITS_TWO_ADAPTER_NOTES)
+        nb_path.write_text(json.dumps(nb, indent=1) + "\n", encoding="utf-8")
+        print(f"wrote {nb_path.relative_to(ROOT)} (bundle {len(b64) / 1024:.0f} KB, sha256 {digest[:12]})")
+        return
+
+    if args.holdout:
+        files, n = payload()
+        for rel in TWO_STEP_CODE:                      # the wirer's runner and its reader
+            files[rel] = (ROOT / rel).read_bytes()
+        b64, digest = bundle(files)
+        nb_path = OUT_DIR / "kaggle_holdout.ipynb"
+        nb = notebook(HOLDOUT_CONFIG, holdout_cells(b64, digest), n, intro=HOLDOUT_INTRO, notes=HOLDOUT_NOTES)
+        nb_path.write_text(json.dumps(nb, indent=1) + "\n", encoding="utf-8")
+        print(f"wrote {nb_path.relative_to(ROOT)} (bundle {len(b64) / 1024:.0f} KB, sha256 {digest[:12]})")
+        return
+
+    if args.e4_wirer:
+        files, n = payload(two_step=True)
+        files[MIXED_V2_TV_BUNDLED] = (ROOT / MIXED_V2_TV).read_bytes()
+        files[MIXED_V2_TEST_BUNDLED] = (ROOT / MIXED_V2_TEST).read_bytes()
+        files.update(true_node_file())
+        files.update(shuffled_node_files())
+        b64, digest = bundle(files)
+        nb_path = OUT_DIR / "kaggle_e4_wirer.ipynb"
+        nb = notebook(E4_WIRER_CONFIG, finetune_two_gpu_cells(b64, digest, zip_name="graphart_e4_wirer.zip"), n,
+                      intro=E4_WIRER_INTRO, notes=E4_WIRER_NOTES)
+        nb_path.write_text(json.dumps(nb, indent=1) + "\n", encoding="utf-8")
+        print(f"wrote {nb_path.relative_to(ROOT)} (bundle {len(b64) / 1024:.0f} KB, sha256 {digest[:12]})")
+        return
+
+    if args.probe_14b_compose:
+        settings = config(PROBE_14B_COMPOSE_JOBS, hours=2.5)
+        files, n = payload()
+        files[MIXED_V2_TV_BUNDLED] = (ROOT / MIXED_V2_TV).read_bytes()      # E1's node lists
+        files.update(shuffled_node_files())                                  # E3's
+        b64, digest = bundle(files)
+        nb_path = OUT_DIR / "kaggle_probe_14b_compose.ipynb"
+        nb = notebook(settings, code_cells(b64, digest), n, intro=PROBE_14B_COMPOSE_INTRO)
+        nb_path.write_text(json.dumps(nb, indent=1) + "\n", encoding="utf-8")
+        print(f"wrote {nb_path.relative_to(ROOT)} ({len(PROBE_14B_COMPOSE_JOBS)} jobs, "
+              f"bundle {len(b64) / 1024:.0f} KB, sha256 {digest[:12]})")
         return
 
     if args.closing_ollama or args.probe_14b or args.probe_14b_nodes:

@@ -1,0 +1,11 @@
+{
+  "backend": "ollama",
+  "model": "qwen2.5-coder:14b",
+  "prompt": "edges_only_cos_nodes_from_mixed-v2",
+  "split": "torchvision",
+  "effort": "high",
+  "n": 21,
+  "cached": 0,
+  "failed": 1,
+  "nodes_from": "data/step1_given/hf__qwen2.5-coder-1.5b-graphart-lora-mixed-v2__zero_shot__torchvision.jsonl"
+}

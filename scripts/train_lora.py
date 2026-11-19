@@ -34,6 +34,11 @@ were 36% of the tokens. Score such an adapter with `pipeline/run_two_step.py --b
 brief-prompt adapter wrote a method name, `_forward`, into module paths -- the rule that a
 target is the attribute path was one of those left out); score that one without --brief.
 
+`--wirer` trains step 2 alone (E4 in docs/experiments.md): one example per program, the
+`two_step_edges_brief` prompt given the reference nodes WITHOUT their stacks -- the node
+list as a one-step model writes it -- answered with its step 2. Score it with
+`pipeline/run_two_step.py --brief --step1-from <another run's replies>`.
+
 A split written `train/2` takes every second program of it -- every second, not the
 first half, because the splits are stored in tier order.
 """
@@ -61,6 +66,7 @@ from torch.utils.checkpoint import checkpoint
 from transformers import (AutoModelForCausalLM, AutoTokenizer, Trainer, TrainerCallback,
                           TrainingArguments)
 
+from graphart.two_step import strip_stacks
 from pipeline.backends import HF_DEFAULT
 from pipeline.run_prompting import _render, load_prompt
 
@@ -257,6 +263,8 @@ def main() -> None:
     ap.add_argument("--fp32", action="store_true", help="no fp16, even on a GPU (slower, never overflows)")
     ap.add_argument("--two-step", action="store_true",
                     help="train the two-step format: two examples per program (see the docstring)")
+    ap.add_argument("--wirer", action="store_true",
+                    help="step 2 only, given stack-free reference nodes (implies the two-step data)")
     ap.add_argument("--full-prompts", action="store_true",
                     help="with --two-step: the full-rules prompts instead of the brief ones")
     args = ap.parse_args()
@@ -269,13 +277,20 @@ def main() -> None:
     # (system, template, answer field) per example of a program
     if args.full_prompts and not args.two_step:
         raise SystemExit("--full-prompts only applies with --two-step")
+    if args.wirer and args.full_prompts:
+        raise SystemExit("--wirer uses the brief step-2 prompt; drop --full-prompts")
+    args.two_step = args.two_step or args.wirer
     two_step_prompts = TWO_STEP_FULL_PROMPTS if args.full_prompts else TWO_STEP_PROMPTS
+    if args.wirer:
+        two_step_prompts = two_step_prompts[1:]                  # step 2 only
     prompts = ([(*load_prompt(name), field) for name, field in two_step_prompts] if args.two_step
                else [(*load_prompt(PROMPT), "target")])
 
     def encode_all(rows: list[dict], name: str) -> list[dict]:
         out, dropped = [], []
         for r in rows:
+            if args.wirer:
+                r = {**r, "step1": strip_stacks(r["step1"])}
             for system, template, answer in prompts:
                 try:
                     out.append(encode(tokenizer, system, template, r, args.max_len, answer))
@@ -384,7 +399,8 @@ def main() -> None:
     tokenizer.save_pretrained(str(out))
     evals = [h for h in trainer.state.log_history if "eval_loss" in h]
     summary = {"base": args.base,
-               "prompt": ("two_step" if args.full_prompts else "two_step_brief") if args.two_step else PROMPT, "excluded_construct": args.exclude_construct,
+               "prompt": ("wirer_brief" if args.wirer else "two_step" if args.full_prompts
+                          else "two_step_brief") if args.two_step else PROMPT, "excluded_construct": args.exclude_construct,
                "train_split": args.train_split, "val_split": args.val_split, "max_len": args.max_len,
                "train_examples": len(train),
                "val_examples": len(val), "epochs": args.epochs, "lr": args.lr,

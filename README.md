@@ -538,6 +538,10 @@ PyTorch module:
 - **Model:** the fine-tuned Qwen2.5-Coder 1.5B reads the code — without running it — and
   writes its graph. On a laptop CPU this takes about 1–3 minutes. For the examples, the
   answer saved during the experiments is shown instantly; untick the box to run live.
+- **Saved answers from several models:** for the examples, *saved answer from* switches
+  between the 26 Oct adapter, mixed-v2, the final pipeline (mixed-v2's nodes + the 1.5B
+  wirer), the 14B composition and others, wherever that run exists for the set. The frozen
+  **torchvision holdout** is a set of its own, with saved answers only (it is never re-run).
 - **Output:** the two graphs side by side with every mismatch coloured (red: missed;
   orange: invented), the metrics (`exact`, `topo`, `right graph`, node F1, edge F1,
   connectivity preserved, shape accuracy, validity), the error category from `scripts/classify_errors.py`, the

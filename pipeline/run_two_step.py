@@ -69,6 +69,13 @@ def main() -> None:
         print("  note: torchvision_holdout is frozen -- score it once, on the final model only.")
     (sys1, tpl1), (sys2, tpl2) = (load_prompt(name + suffix) for name in STEPS)
     rows = load_split(args.split, args.tier, args.limit, args.stratify)
+    if given is not None:
+        # A node file may cover only some samples (the reordered ones, say): the rest
+        # are left out, not failed.
+        left_out = [r["id"] for r in rows if r["id"] not in given]
+        rows = [r for r in rows if r["id"] in given]
+        if left_out:
+            print(f"  --step1-from: {len(left_out)} samples have no reply there and are left out", flush=True)
     model_name = args.model or DEFAULT_MODELS[args.backend]
     # Both calls, priced together; the step-2 prompt is estimated without step 1's
     # nodes, so this undercounts its input a little.

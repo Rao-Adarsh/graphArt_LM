@@ -137,6 +137,12 @@ def step2_input(step1: str) -> str:
     return "\n".join(out)
 
 
+def strip_stacks(step1: str) -> str:
+    """Step 1 without its `@64>56>16` stacks: the node list as a model that writes no
+    stacks (a one-step model) gives it, which a step-2-only wirer is trained on."""
+    return "\n".join(_STACK_RE.sub("", line) for line in step1.splitlines())
+
+
 def assemble(step1: str, step2: str) -> str:
     """The two replies as one ordinary answer; raises ParseError if either is unreadable."""
     graph, _ = parse_step1(step1)

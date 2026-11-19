@@ -67,11 +67,28 @@ def _lines(node: dict) -> tuple[str, str, str]:
     return head, body, tail
 
 
+def _generations(graph: dict) -> list[list]:
+    """Topological generations. A model's reply can contain a cycle; then the layers come
+    from the edges that run forward in node order (a back edge is still drawn)."""
+    g = to_networkx(graph)
+    if not nx.is_directed_acyclic_graph(g):
+        forward = nx.DiGraph()
+        forward.add_nodes_from(g.nodes)
+        forward.add_edges_from((a, b) for a, b in g.edges() if a < b)
+        g = forward
+    return [sorted(gen) for gen in nx.topological_generations(g)]
+
+
+def figure_height(graph: dict) -> float:
+    """Inches tall enough that a box's three label lines, 0.2 data units apart, clear
+    their 7-point text: about 1.6 data units per inch of axes."""
+    return max(5.0, 0.95 * len(_generations(graph)) + 1.6)
+
+
 def layout(graph: dict) -> dict:
     """Top-to-bottom by topological generation, spread within each generation."""
-    g = to_networkx(graph)
     pos = {}
-    for depth, generation in enumerate(nx.topological_generations(g)):
+    for depth, generation in enumerate(_generations(graph)):
         row = sorted(generation)
         for i, nid in enumerate(row):
             pos[nid] = ((i - (len(row) - 1) / 2) * X_GAP, -depth * Y_GAP)
@@ -166,7 +183,7 @@ def _unmatched(truth: dict, pred: dict) -> tuple[set, set, set, set]:
 
 def side_by_side(code: str, graph: dict, title: str = "", path: str | None = None):
     """Source on the left, the graph it traces to on the right."""
-    depth = len(list(nx.topological_generations(to_networkx(graph))))
+    depth = len(_generations(graph))
     fig = plt.figure(figsize=(13, max(5.0, 0.62 * depth + 1.2)))
     grid = fig.add_gridspec(1, 2, width_ratios=[0.85, 1.5])
     ax_code, ax_graph = fig.add_subplot(grid[0, 0]), fig.add_subplot(grid[0, 1])
@@ -195,9 +212,8 @@ def compare_figure(truth: dict, pred: dict, title: str = "", path: str | None = 
     orange on the right is something the prediction invented.
     """
     bad_t, bad_p, bad_te, bad_pe = _unmatched(truth, pred)
-    depth = max(len(list(nx.topological_generations(to_networkx(g))))
-                for g in (truth, pred) if g["nodes"]) if pred["nodes"] else 4
-    fig = plt.figure(figsize=(13, max(5.0, 0.62 * depth + 1.4)))
+    height = max(figure_height(g) for g in (truth, pred) if g["nodes"]) if pred["nodes"] else 5.0
+    fig = plt.figure(figsize=(13, height))
     ax_t, ax_p = fig.add_subplot(1, 2, 1), fig.add_subplot(1, 2, 2)
 
     draw_graph(truth, ax_t, bad_nodes=bad_t, bad_edges=bad_te, bad_style=MISSING,

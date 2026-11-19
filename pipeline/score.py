@@ -177,7 +177,10 @@ def main() -> None:
     args.split = args.split or run_split(results_path)
     truths = load_truths(args.split)
 
-    mode = args.mode or ("nodes" if "nodes_only" in results_path.stem
+    # An edges-only run handed other nodes than the reference's (run_prompting
+    # --nodes-from) already stores each reply as a whole graph: score it as one.
+    given = bool(records) and records[0].get("given_nodes")
+    mode = args.mode or ("full" if given else "nodes" if "nodes_only" in results_path.stem
                          else "edges" if "edges_only" in results_path.stem else "full")
     scored = []
     for record in records:
