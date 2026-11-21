@@ -87,6 +87,22 @@ LOSS_CHUNK = 1024                    # answer tokens whose logits exist at once
 WORLD_SIZE = int(os.environ.get("WORLD_SIZE", "1"))
 
 
+def attention_without_gqa() -> None:
+    """Let PyTorch's memory-efficient attention kernel run on a T4.
+
+    Qwen2.5 shares each key/value head between several query heads. With no padding mask
+    (one example per step), transformers passes that to PyTorch as `enable_gqa=True`,
+    which the memory-efficient kernel does not take on a T4, so PyTorch fell back to the
+    plain kernel, whose memory grows with the square of the length: out of memory at
+    8,192 tokens, even split over two GPUs. Expanding the key/value heads first
+    (transformers' own fallback path) lets the efficient kernel run. Measured on a T4
+    (scripts/memory_probe.py, 20 Nov): 20,480 tokens fit in 63% of the GPU, and every
+    length got 1.6-2.5x faster. Same numbers out -- only the kernel changes.
+    """
+    import transformers.integrations.sdpa_attention as sdpa
+    sdpa.use_gqa_in_sdpa = lambda *args, **kwargs: False
+
+
 class NonFiniteLoss(RuntimeError):
     pass
 
@@ -267,7 +283,15 @@ def main() -> None:
                     help="step 2 only, given stack-free reference nodes (implies the two-step data)")
     ap.add_argument("--full-prompts", action="store_true",
                     help="with --two-step: the full-rules prompts instead of the brief ones")
+    ap.add_argument("--hier", action="store_true",
+                    help="the hierarchical schema (graphart/hier_tasks.py): per program one tree example "
+                         "and one wiring example per block class variant; splits default to hier_train / "
+                         "hier_val")
+    ap.add_argument("--hier-max-wire", type=int, default=0,
+                    help="with --hier: at most this many wiring examples per program (0 = all)")
     args = ap.parse_args()
+    if args.hier and args.train_split == "train":
+        args.train_split, args.val_split = "hier_train", "hier_val"
 
     cuda = torch.cuda.is_available()
     fp16 = cuda and not args.fp32
@@ -286,7 +310,36 @@ def main() -> None:
     prompts = ([(*load_prompt(name), field) for name, field in two_step_prompts] if args.two_step
                else [(*load_prompt(PROMPT), "target")])
 
+    def encode_hier(rows: list[dict], name: str) -> list[dict]:
+        from graphart.hier_tasks import TREE_PROMPT, WIRE_PROMPT, tree_task, wiring_tasks
+        (tsys, ttpl), (wsys, wtpl) = load_prompt(TREE_PROMPT), load_prompt(WIRE_PROMPT)
+        out, dropped, n_tree, n_wire = [], [], 0, 0
+        for r in rows:
+            items = [(tsys, tree_task(r["code"], ttpl, r["hier"]), "tree")]
+            wires = wiring_tasks(r["code"], r["hier"], wtpl)
+            if args.hier_max_wire:
+                wires = wires[:args.hier_max_wire]
+            items += [(wsys, w, w["tag"]) for w in wires]
+            for system, item, what in items:
+                # the user text is already filled in; encode() renders it with no fields left
+                ex = {"id": f"{r['id']}/{what}", "code": "", "target": item["answer"]}
+                try:
+                    out.append(encode(tokenizer, system, item["user"], ex, args.max_len))
+                    n_tree += what == "tree"
+                    n_wire += what != "tree"
+                except ValueError:
+                    if not args.drop_over_max:
+                        raise
+                    dropped.append(ex["id"])
+        print(f"{name}: {n_tree} tree + {n_wire} wiring examples from {len(rows)} programs", flush=True)
+        if dropped:
+            print(f"{name}: left out {len(dropped)} examples over --max-len {args.max_len}: "
+                  f"{', '.join(dropped[:8])}{' ...' if len(dropped) > 8 else ''}", flush=True)
+        return out
+
     def encode_all(rows: list[dict], name: str) -> list[dict]:
+        if args.hier:
+            return encode_hier(rows, name)
         out, dropped = [], []
         for r in rows:
             if args.wirer:
@@ -312,6 +365,7 @@ def main() -> None:
     if args.check_only:
         return
 
+    attention_without_gqa()
     model = AutoModelForCausalLM.from_pretrained(args.base, dtype=torch.float16 if fp16 else torch.float32)
     model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     model.enable_input_require_grads()
@@ -399,7 +453,7 @@ def main() -> None:
     tokenizer.save_pretrained(str(out))
     evals = [h for h in trainer.state.log_history if "eval_loss" in h]
     summary = {"base": args.base,
-               "prompt": ("wirer_brief" if args.wirer else "two_step" if args.full_prompts
+               "prompt": "hier_tree+hier_wire" if args.hier else ("wirer_brief" if args.wirer else "two_step" if args.full_prompts
                           else "two_step_brief") if args.two_step else PROMPT, "excluded_construct": args.exclude_construct,
                "train_split": args.train_split, "val_split": args.val_split, "max_len": args.max_len,
                "train_examples": len(train),

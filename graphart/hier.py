@@ -103,7 +103,14 @@ def _proxies(value) -> list:
 
 
 class HierTracer(GranularTracer):
-    """GranularTracer that records each module call and stamps nodes with their call."""
+    """GranularTracer that records each module call and stamps nodes with their call.
+
+    Buffers are traced as named attribute reads (`@relative_position_index`), not as the
+    anonymous `_tensor_constantN` fx makes of them by default: the name is what the code
+    says, and an anonymous constant is created inside whatever call first uses it, which
+    puts it in the wrong block."""
+
+    proxy_buffer_attributes = True
 
     def __init__(self):
         super().__init__()

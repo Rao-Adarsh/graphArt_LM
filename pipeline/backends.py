@@ -277,6 +277,14 @@ class HFBackend:
         else:
             base, self.model = model, model
         self.tokenizer = AutoTokenizer.from_pretrained(adapter or base)
+        if self.device == "cuda":
+            # Qwen2.5 shares key/value heads between query heads; passed to PyTorch as
+            # enable_gqa=True, the memory-efficient attention kernel is refused on a T4 and
+            # the plain one's memory grows with the square of the prompt (hierarchical
+            # prompts reach ~16k tokens). Expanding the heads first lets the efficient kernel
+            # run -- the same numbers, as scripts/train_lora.attention_without_gqa does.
+            import transformers.integrations.sdpa_attention as sdpa
+            sdpa.use_gqa_in_sdpa = lambda *args, **kwargs: False
         net = AutoModelForCausalLM.from_pretrained(base, dtype=dtype)
         if adapter:
             from peft import PeftModel

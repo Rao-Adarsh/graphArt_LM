@@ -11,7 +11,7 @@
   --bg: #f6f6f4; --surface: #fcfcfb; --surface-2: #f0efec; --border: #dddcd6;
   --text: #0b0b0b; --text-2: #52514e; --text-3: #7d7c76;
   --accent: #2a78d6; --accent-soft: #e3eefb;
-  --g1: #2a78d6; --g2: #eb6834; --g3: #1baf7a; --g4: #eda100;
+  --g1: #2a78d6; --g2: #eb6834; --g3: #1baf7a; --g4: #eda100; --g5: #e87ba4;
   --ph-fill: #e8f5e9; --ph-edge: #2e7d32;
   --mod-fill: #eef3fb; --mod-edge: #3b5b92;
   --fn-fill: #fdf3e3; --fn-edge: #c25e05;
@@ -26,7 +26,7 @@
     --bg: #121211; --surface: #1a1a19; --surface-2: #232321; --border: #3a3a37;
     --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86;
     --accent: #3987e5; --accent-soft: #1c2c40;
-    --g1: #3987e5; --g2: #d95926; --g3: #199e70; --g4: #c98500;
+    --g1: #3987e5; --g2: #d95926; --g3: #199e70; --g4: #c98500; --g5: #d55181;
     --ph-fill: #16301a; --ph-edge: #6cc070;
     --mod-fill: #1a2638; --mod-edge: #84a8e0;
     --fn-fill: #33260f; --fn-edge: #f0a24a;
@@ -41,7 +41,7 @@
   --bg: #121211; --surface: #1a1a19; --surface-2: #232321; --border: #3a3a37;
   --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86;
   --accent: #3987e5; --accent-soft: #1c2c40;
-  --g1: #3987e5; --g2: #d95926; --g3: #199e70; --g4: #c98500;
+  --g1: #3987e5; --g2: #d95926; --g3: #199e70; --g4: #c98500; --g5: #d55181;
   --ph-fill: #16301a; --ph-edge: #6cc070;
   --mod-fill: #1a2638; --mod-edge: #84a8e0;
   --fn-fill: #33260f; --fn-edge: #f0a24a;
@@ -95,6 +95,19 @@ pre.code .l { display: block; padding: 0 12px 0 52px; position: relative; white-
 pre.code .l::before { counter-increment: ln; content: counter(ln); position: absolute; left: 0; width: 40px; text-align: right; color: var(--text-3); }
 .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; } .num { color: var(--num); }
 .graph-wrap { flex: 1; position: relative; min-width: 0; min-height: 0; background: var(--bg); overflow: hidden; }
+#right-pane { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.seg { display: flex; gap: 2px; padding: 6px 10px; background: var(--surface); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.seg button { border: 1px solid var(--border); background: var(--surface); color: var(--text-2); padding: 3px 10px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px; }
+.seg button.on { background: var(--accent-soft); color: var(--text); border-color: var(--accent); }
+#h-panel { flex: 1; overflow-y: auto; padding: 10px 14px 30px; background: var(--bg); min-height: 0; }
+#h-panel h4 { margin: 14px 0 6px; font: 600 12px ui-monospace, Consolas, monospace; color: var(--text); }
+#h-panel pre.tree { margin: 0; padding: 8px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; font: 12px/1.45 ui-monospace, Consolas, monospace; overflow-x: auto; max-height: 420px; }
+.mini-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 34%); gap: 10px; align-items: start; }
+.mini-row pre { margin: 0; padding: 8px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; font: 11.5px/1.45 ui-monospace, Consolas, monospace; overflow-x: auto; }
+.mini { position: relative; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; display: flex; }
+.mini .legend, .mini .hint { display: none; }
+.h-note { color: var(--text-3); font-size: 12px; margin: 0 0 8px; }
+@media (max-width: 800px) { .mini-row { grid-template-columns: 1fr; } }
 .graph-wrap svg { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
 .graph-wrap svg.drag { cursor: grabbing; }
 .gtools { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; z-index: 2; }
@@ -176,7 +189,10 @@ table.t th { color: var(--text-2); font-weight: 600; position: sticky; top: 0; b
           <select id="fam"></select>
           <select id="sort">
             <option value="id">Sort: id</option>
-            <option value="nodes-d">Nodes ↓</option>
+            <option value="input_tok-d">Tree-task tokens ↓</option>
+            <option value="answer_tok-d">Answer tokens ↓</option>
+            <option value="n_graphs-d">Block graphs ↓</option>
+            <option value="nodes-d">Flat nodes ↓</option>
             <option value="nodes-a">Nodes ↑</option>
             <option value="depth-d">Depth ↓</option>
             <option value="nesting-d">Nesting ↓</option>
@@ -192,8 +208,14 @@ table.t th { color: var(--text-2); font-weight: 600; position: sticky; top: 0; b
         <button class="small" id="to-b" title="Put this program on the right of the Compare tab">Compare as B</button>
       </div>
       <div id="detail-body">
-        <div id="code-pane"><div id="code-note"></div><pre class="code" id="code"></pre></div>
-        <div class="graph-wrap" id="g-main"></div>
+        <div id="code-pane">
+          <div class="seg" id="code-seg"><button data-m="reduced" class="on">What the model reads</button><button data-m="orig">Original code</button></div>
+          <div id="code-note"></div><pre class="code" id="code"></pre></div>
+        <div id="right-pane">
+          <div class="seg" id="graph-seg"><button data-m="hier" class="on">New schema: tree + block graphs</button><button data-m="flat">Flat fx graph</button></div>
+          <div id="h-panel"></div>
+          <div class="graph-wrap" id="g-main" style="display:none"></div>
+        </div>
       </div>
     </div>
   </section>
@@ -210,14 +232,18 @@ table.t th { color: var(--text-2); font-weight: 600; position: sticky; top: 0; b
 <script>
 const DATA = /*__DATA__*/null;
 const GROUPS = {
+  "v3-net":   {label: "Generator v3 networks",       color: "--g2"},
+  "v3-blo":   {label: "Generator v3 blocks",         color: "--g1"},
+  "t14":      {label: "Tiers 1–4 (generator v1)",    color: "--g1", hollow: true},
   "gen-t5":   {label: "Generator tier 5 (blocks)",   color: "--g1"},
   "gen-t6":   {label: "Generator tier 6 (networks)", color: "--g2"},
   "fresh-t5": {label: "Fresh tier 5",                color: "--g1", hollow: true},
   "fresh-t6": {label: "Fresh tier 6",                color: "--g2", hollow: true},
   "tv-dev":   {label: "Torchvision dev 21",          color: "--g3"},
   "tv-full":  {label: "Torchvision full models",     color: "--g4"},
+  "timm":     {label: "timm (real code, training-type)", color: "--g5"},
 };
-const GEN = new Set(["gen-t5", "gen-t6", "fresh-t5", "fresh-t6"]);
+const GEN = new Set(["gen-t5", "gen-t6", "fresh-t5", "fresh-t6", "v3-net", "v3-blo", "t14"]);
 const rows = DATA.rows;
 const byId = new Map(rows.map(r => [r.id, r]));
 const present = Object.keys(GROUPS).filter(g => rows.some(r => r.group === g));
@@ -428,6 +454,7 @@ function chips(r) {
   const s = r.stats;
   const items = [["nodes", s.nodes], ["edges", s.edges], ["depth", s.depth], ["width", s.width], ["merges", s.merges], ["max fan-in", s.fan_in], ["path nesting", s.nesting], ["modules", s.modules]];
   if (s.code_lines != null) items.push(["code lines", s.code_lines], ["classes", s.classes], ["functions", s.functions]);
+  if (s.answer_tok != null) items.unshift(["answer tokens", s.answer_tok], ["block graphs", s.n_graphs], ["largest block", s.max_graph], ["tree lines", s.tree_lines]);
   return items.map(([k, v]) => `<span class="chip">${k} <b>${v}</b></span>`).join("");
 }
 
@@ -457,13 +484,59 @@ function open(id) {
   document.querySelectorAll("#list .item").forEach(x => x.classList.toggle("sel", x.dataset.id === id));
   document.getElementById("d-title").textContent = r.id;
   document.getElementById("d-chips").innerHTML = `<span class="chip">${GROUPS[r.group].label}</span>` + (r.family ? `<span class="chip">${esc(r.family)}</span>` : "") + chips(r);
-  document.getElementById("code-note").textContent = r.code_is_file
-    ? "Whole source file of the torchvision module that defines this network (for reference; not what the dev set shows)."
-    : `${r.idioms.length} idioms: ${r.idioms.join(" · ")}`;
-  document.getElementById("code").innerHTML = highlight(r.code);
+  renderCode(r);
   document.getElementById("code-pane").scrollTop = 0;
-  mainView.draw(r);
+  renderHier(r);
+  if (graphMode === "flat") mainView.draw(r); else flatPending = r;
   history.replaceState(null, "", "#p=" + encodeURIComponent(id));
+}
+
+/* code pane: reduced (what the model reads) or original */
+let codeMode = "reduced", graphMode = "hier", flatPending = null;
+function renderCode(r) {
+  const s = r.stats, red = codeMode === "reduced" && r.code_reduced;
+  document.getElementById("code-note").textContent = red
+    ? `After graphart/reduce.py: ${s.code_red_tok} tokens (original ${s.code_tok}, ${Math.round(100 - 100 * s.code_red_tok / s.code_tok)}% less). No docstrings, comments, annotations, unused methods or weight init.`
+    : `${s.code_tok} tokens · ${r.idioms.length} idioms: ${r.idioms.join(" · ")}`;
+  document.getElementById("code").innerHTML = highlight(red ? r.code_reduced : r.code);
+}
+document.getElementById("code-seg").addEventListener("click", e => {
+  const m = e.target.dataset.m; if (!m) return;
+  codeMode = m;
+  document.querySelectorAll("#code-seg button").forEach(b => b.classList.toggle("on", b.dataset.m === m));
+  if (selected) renderCode(byId.get(selected));
+});
+document.getElementById("graph-seg").addEventListener("click", e => {
+  const m = e.target.dataset.m; if (!m) return;
+  graphMode = m;
+  document.querySelectorAll("#graph-seg button").forEach(b => b.classList.toggle("on", b.dataset.m === m));
+  document.getElementById("h-panel").style.display = m === "hier" ? "" : "none";
+  document.getElementById("g-main").style.display = m === "flat" ? "" : "none";
+  if (m === "flat") { if (flatPending) { mainView.draw(flatPending); flatPending = null; } else mainView.refit(); }
+  else miniViews.forEach(v => v.refit());
+});
+
+/* new schema: the tree, then one drawn graph per block variant */
+let miniViews = [];
+function renderHier(r) {
+  const p = document.getElementById("h-panel");
+  miniViews = [];
+  if (!r.tree) { p.innerHTML = `<p class="h-note">No hierarchical answer for this program.</p>`; return; }
+  const s = r.stats;
+  let h = `<p class="h-note">The answer the model writes: the module tree (${s.tree_lines} lines) and ${s.n_graphs} block graph(s), ${s.answer_tok} tokens in all (the flat fx graph has ${s.nodes} nodes). Tree-task input = reduced code + tree = ${s.input_tok} tokens.</p>`;
+  h += `<h4>TREE</h4><pre class="tree">${esc(r.tree)}</pre>`;
+  r.hgraphs.forEach((g, i) => {
+    const ht = Math.min(560, 70 + g.nodes.length * 52);
+    h += `<h4>GRAPH ${esc(g.tag)} <span style="color:var(--text-3);font-weight:400">· ${g.nodes.length} nodes</span></h4>
+      <div class="mini-row"><div class="mini" style="height:${ht}px"><div class="graph-wrap" id="mini-${i}"></div></div><pre>${esc(g.text)}</pre></div>`;
+  });
+  p.innerHTML = h;
+  p.scrollTop = 0;
+  r.hgraphs.forEach((g, i) => {
+    const v = makeGraphView(document.getElementById(`mini-${i}`));
+    v.draw({id: `${r.id}::${g.tag}`, nodes: g.nodes, edges: g.edges});
+    miniViews.push(v);
+  });
 }
 document.getElementById("to-a").onclick = () => { setCmp("a", selected); setView("compare"); };
 document.getElementById("to-b").onclick = () => { setCmp("b", selected); setView("compare"); };
@@ -482,7 +555,13 @@ function setCmp(side, id) {
 /* ---------- stats ---------- */
 let statsBuilt = false;
 const METRICS = [
-  ["nodes", "Nodes", "Operations in the traced graph.", true],
+  ["input_tok", "Tree-task tokens (new schema)", "Reduced code + the tree it must write: the longest thing the model handles.", true],
+  ["code_red_tok", "Reduced code tokens", "What the model reads, after graphart/reduce.py.", true],
+  ["answer_tok", "Answer tokens (new schema)", "Tree + all block graphs.", true],
+  ["tree_lines", "Tree lines", "Lines of the module tree (repeats collapsed).", true],
+  ["n_graphs", "Block graphs", "Distinct (class, wiring) graphs the answer contains.", false],
+  ["max_graph", "Largest block graph", "Nodes in the biggest per-class wiring graph.", false],
+  ["nodes", "Flat fx nodes", "Operations in the traced flat graph (the old target).", true],
   ["depth", "Depth", "Longest input→output path, in edges.", true],
   ["width", "Width", "Most nodes side by side (largest topological generation): how parallel the branches get.", false],
   ["merges", "Merges", "Nodes with more than one input (add, cat, mul …).", true],
@@ -542,25 +621,25 @@ function buildStats() {
 
   // vocabulary
   const genRows = rows.filter(r => GEN.has(r.group) && shown.has(r.group));
-  const dev = rows.filter(r => r.group === "tv-dev"), full = rows.filter(r => r.group === "tv-full");
+  const dev = rows.filter(r => r.group === "tv-dev"), full = rows.filter(r => r.group === "tv-full"), tim = rows.filter(r => r.group === "timm");
   const share = (rs, v) => rs.length ? rs.filter(r => r.vocab.includes(v)).length / rs.length : NaN;
   const vocab = [...new Set(rows.flatMap(r => r.vocab))];
-  const vt = vocab.map(v => ({v, gen: share(genRows, v), dev: share(dev, v), full: share(full, v)}))
-    .filter(x => x.dev > 0 || x.full > 0 || x.gen > 0);
-  vt.sort((a, b) => ((a.gen === 0) - (b.gen === 0)) * -1 || (Math.max(b.dev || 0, b.full || 0) - Math.max(a.dev || 0, a.full || 0)) || (b.gen - a.gen));
+  const vt = vocab.map(v => ({v, gen: share(genRows, v), dev: share(dev, v), full: share(full, v), tim: share(tim, v)}))
+    .filter(x => x.dev > 0 || x.full > 0 || x.gen > 0 || x.tim > 0);
+  vt.sort((a, b) => ((a.gen === 0) - (b.gen === 0)) * -1 || (Math.max(b.dev || 0, b.full || 0, b.tim || 0) - Math.max(a.dev || 0, a.full || 0, a.tim || 0)) || (b.gen - a.gen));
   h += `<h2>Which operations appear</h2><p class="sub">Share of programs whose graph uses each module class, function or tensor method. <span class="gap">Red</span>: real torchvision uses it, the selected generator programs never do. Generator column = the generator groups ticked in the header.</p>`;
   h += `<div class="controls-row"><label><input type="checkbox" id="gaps-only"> only operations the generator never produces</label></div>`;
-  h += `<div class="card"><div class="scroll"><table class="t" id="vocab-t"><tr><th>Operation</th><th>Generator (${genRows.length})</th><th>Torchvision dev (${dev.length})</th><th>Full models (${full.length})</th></tr>`;
+  h += `<div class="card"><div class="scroll"><table class="t" id="vocab-t"><tr><th>Operation</th><th>Generator (${genRows.length})</th><th>Torchvision dev (${dev.length})</th><th>Full models (${full.length})</th><th>timm (${tim.length})</th></tr>`;
   const bar = (x, c) => Number.isNaN(x) ? "—" : `<span class="bar" style="width:${Math.round(x * 70)}px;background:var(${c})"></span>${Math.round(x * 100)}%`;
   for (const x of vt) {
-    const gap = x.gen === 0 && (x.dev > 0 || x.full > 0);
-    h += `<tr data-gap="${gap ? 1 : 0}"><td class="${gap ? "gap" : ""}">${esc(x.v)}</td><td>${bar(x.gen, "--g1")}</td><td>${bar(x.dev, "--g3")}</td><td>${bar(x.full, "--g4")}</td></tr>`;
+    const gap = x.gen === 0 && (x.dev > 0 || x.full > 0 || x.tim > 0);
+    h += `<tr data-gap="${gap ? 1 : 0}"><td class="${gap ? "gap" : ""}">${esc(x.v)}</td><td>${bar(x.gen, "--g1")}</td><td>${bar(x.dev, "--g3")}</td><td>${bar(x.full, "--g4")}</td><td>${bar(x.tim, "--g5")}</td></tr>`;
   }
   h += `</table></div></div>`;
 
   // idioms
-  const codeGroups = gs.filter(g => g !== "tv-full");
-  h += `<h2>Code idioms</h2><p class="sub">Share of programs whose source matches each idiom (a regex over the code; rough, but comparable across groups). Full models are left out: their source file holds every variant.</p>`;
+  const codeGroups = gs;
+  h += `<h2>Code idioms</h2><p class="sub">Share of programs whose source matches each idiom (a regex over the code; rough, but comparable across groups). Full models and timm are their assembled source (the classes they are built from).</p>`;
   h += `<div class="card"><div class="scroll" style="max-height:none"><table class="t"><tr><th>Idiom</th>${codeGroups.map(g => `<th>${GROUPS[g].label}</th>`).join("")}</tr>`;
   for (const idi of DATA.idioms) {
     h += `<tr><td>${esc(idi)}</td>`;

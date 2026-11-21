@@ -1,0 +1,105 @@
+{
+  "created": "2026-11-19",
+  "schema": "hierarchical v1: module tree + one wiring graph per class forward() (graphart/hier.py)",
+  "graphart_hier_sha256": "7988df2e3a856d76f0e0018f4a1aeeccbca56170a6bb16878f86582fc043b190",
+  "versions": {
+    "torch": "2.14.1+cpu",
+    "torchvision": "0.29.1+cpu",
+    "timm": "1.0.31"
+  },
+  "holdout": {
+    "file": "data/generated/hier_holdout.jsonl",
+    "sha256": "3f7b41236abf36d944dc2bd3d849010a76954676a280a26ad86d0184462f45d5",
+    "n": 15,
+    "families": {
+      "swin": [
+        "swin_t",
+        "swin_s",
+        "swin_b"
+      ],
+      "swin_v2": [
+        "swin_v2_t",
+        "swin_v2_s",
+        "swin_v2_b"
+      ],
+      "maxvit": [
+        "maxvit_t"
+      ],
+      "mvit": [
+        "mvit_v1_b",
+        "mvit_v2_s"
+      ],
+      "swin3d": [
+        "swin3d_t",
+        "swin3d_s",
+        "swin3d_b"
+      ],
+      "fcn": [
+        "fcn_resnet50",
+        "fcn_resnet101"
+      ],
+      "lraspp": [
+        "lraspp_mobilenet_v3_large"
+      ]
+    },
+    "lossless": 15
+  },
+  "timm_test": {
+    "file": "data/generated/hier_timm_test.jsonl",
+    "sha256": "68b1d4b60318fa87a925eaec7c17113332d92847288e115bd86ab2f70bba4ccc",
+    "n": 6,
+    "families": [
+      "dla",
+      "cspnet",
+      "ghostnet"
+    ],
+    "lossless": 6,
+    "rule": "DLA, CSPNet, GhostNet (two sizes each); a family that does not trace losslessly is replaced by the next of HRNet, ReXNet, SelecSLS -- fixed before building"
+  },
+  "dev": {
+    "file": "data/generated/hier_dev.jsonl",
+    "n": 51,
+    "note": "development data; not frozen"
+  },
+  "training_exclusions": {
+    "timm_files": [
+      "swin_transformer",
+      "swin_transformer_v2",
+      "swin_transformer_v2_cr",
+      "maxxvit",
+      "mvitv2",
+      "dla",
+      "cspnet",
+      "ghostnet"
+    ],
+    "why": "holdout architectures (Swin, MaxViT, MViT) and the timm test families are never trained on",
+    "generator": "programs whose variant graphs are isomorphic to a whole holdout/timm-test program's are rejected"
+  },
+  "rules": [
+    "Holdout and timm_test are scored ONCE, on the frozen setup, after a dated amendment to this file fixes the pipeline, the models and the comparisons -- written before any reply on them exists.",
+    "Never tune prompts, data, the generator or training on them; never generate replies on them before the amendment; never print or read their content while developing (the builder prints counts only).",
+    "The 17-sample flat holdout (FROZEN.json) stays spent and is not part of this protocol.",
+    "Caveat recorded at freezing: the holdout constructors were traced once on 19 Nov in a count of all torchvision models (counts only, no content looked at)."
+  ],
+  "amendments": [
+    {
+      "date": "2026-11-21",
+      "kind": "re-freeze (rebuild)",
+      "reason": "assembler fix: real-code samples now include the plain classes (config dataclasses, not weight enums) and module-level constants their code uses; before, e.g. EfficientNet's MBConvConfig -- the only reference to MBConv -- and VGG's cfgs were missing. Found 21 Nov by a static undefined-name check on dev and timm training data; no holdout or timm-test content was looked at, and no reply on either set exists.",
+      "graphart_hier_sha256": "7988df2e3a856d76f0e0018f4a1aeeccbca56170a6bb16878f86582fc043b190",
+      "scripts_build_hier_eval_sha256": "0bca5262e85a10126fabafe65c667af6aa1311ea9d1a1ad6badaaafeeeee5d32",
+      "holdout": {
+        "old_sha256": "a3688e55c989e620b4eda91d77e3a22e7e352f53e4f5cceecd5f210115b897e3",
+        "new_sha256": "3f7b41236abf36d944dc2bd3d849010a76954676a280a26ad86d0184462f45d5",
+        "n": 15,
+        "lossless": 15
+      },
+      "timm_test": {
+        "old_sha256": "2520ea9cea2b9bee9c80722fc3d0fad57ea865c0c3b5c2a3fc0e22a7237e0a95",
+        "new_sha256": "68b1d4b60318fa87a925eaec7c17113332d92847288e115bd86ab2f70bba4ccc",
+        "n": 6,
+        "lossless": 6
+      }
+    }
+  ]
+}

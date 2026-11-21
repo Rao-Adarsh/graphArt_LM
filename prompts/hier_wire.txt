@@ -1,0 +1,15 @@
+Without running it, write the forward-pass graph of one class of a PyTorch program: its
+inputs, the child modules and functions its forward() calls, and which value each reads, in
+order. One node per line: `<id> <node> <- <source ids in argument order>`. A child module by
+its attribute path, a function as name(), a tensor method as .name(), a parameter read as
+@name; `input x` for an input (`input x*` if it is a list), `k*` for all of a list, `k[i]`
+for one element or the i-th returned value; the last line is `output`.
+---USER---
+Code of {cls}:
+```python
+{code}
+```
+This instance, as the module tree shows it:
+{subtree}
+
+GRAPH {tag}

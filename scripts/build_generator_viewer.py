@@ -157,19 +157,91 @@ def idioms(code: str) -> list[str]:
     return found
 
 
-def pack(row_id: str, group: str, code: str, graph: dict, *, family: str = "", split: str = "",
-         code_is_file: bool = False) -> dict:
+_TOK = None
+
+
+def ntok(text: str) -> int:
+    """Qwen tokens when the tokenizer is cached locally, else characters / 3.3."""
+    global _TOK
+    if _TOK is None:
+        try:
+            from transformers import AutoTokenizer
+            tok = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-Coder-1.5B-Instruct", local_files_only=True)
+            _TOK = lambda s: len(tok(s)["input_ids"])
+        except Exception:
+            _TOK = lambda s: round(len(s) / 3.3)
+    return _TOK(text)
+
+
+def hier_graphs(h: dict) -> list[dict]:
+    """The visible wiring graphs, in answer order, in the viewer's node/edge format."""
+    from graphart.hier import _child, graph_text
+    first = {}
+
+    def walk(node):
+        if node["kind"] == "opaque":
+            return
+        if node["kind"] == "block" and node["tag"] in h["variants"] and node["tag"] not in first:
+            first[node["tag"]] = node
+        for c in node["children"]:
+            walk(c)
+    walk(h["tree"])
+    op = {"input": "placeholder", "output": "output", "module": "call_module", "function": "call_function",
+          "method": "call_method", "get_attr": "get_attr"}
+    out = []
+    for tag, tnode in first.items():
+        vnodes = h["variants"][tag]["nodes"]
+        nodes, edges = [], {}
+        for i, n in enumerate(vnodes):
+            cls, params = "", ""
+            if n["kind"] == "module":
+                child = _child(tnode, n["target"])
+                if child is not None:
+                    cls = child["tag"] or child["cls"]
+                    if child["kind"] == "leaf":
+                        params = short_params({"cls": child["cls"], "params": child["params"]})
+            nodes.append([i, op[n["kind"]], n["target"] + ("*" if n["pack"] else ""), cls, params, None])
+            for slot, t in enumerate(n["src"]):
+                src = int(re.match(r"\d+", t).group())
+                edges.setdefault((src, i), []).append(slot)
+        out.append({"tag": tag, "nodes": nodes, "edges": [[a, b, sl] for (a, b), sl in edges.items()],
+                    "text": graph_text(vnodes)})
+    return out
+
+
+def pack(row_id: str, group: str, code: str, graph: dict, h: dict | None = None, *, family: str = "",
+         split: str = "", code_is_file: bool = False) -> dict:
+    from graphart.hier import to_text, tree_text
+    from graphart.reduce import reduce_source
     nodes = [[n["id"], n["op"], n["target"], n.get("cls") or "", short_params(n),
               n.get("shape")] for n in graph["nodes"]]
     edges = [[e["src"], e["dst"], e["args"]] for e in graph["edges"]]
-    return {
+    try:
+        reduced = reduce_source(code)
+    except SyntaxError:
+        reduced = code
+    st = stats(graph, None if code_is_file else code)
+    row = {
         "id": row_id, "group": group, "family": family, "split": split,
-        "code": code, "code_is_file": code_is_file,
+        "code": code, "code_reduced": reduced, "code_is_file": code_is_file,
         "nodes": nodes, "edges": edges,
-        "stats": stats(graph, None if code_is_file else code),
         "vocab": sorted({vocab_label(n) for n in graph["nodes"]} - {None}),
         "idioms": [] if code_is_file else idioms(code),
     }
+    st["code_tok"] = ntok(code)
+    st["code_red_tok"] = ntok(reduced)
+    if h is not None:
+        answer = to_text(h)
+        graphs = hier_graphs(h)
+        row["tree"] = tree_text(h)
+        row["hgraphs"] = graphs
+        st["answer_tok"] = ntok(answer)
+        st["tree_lines"] = len(row["tree"].splitlines())
+        st["n_graphs"] = len(graphs)
+        st["max_graph"] = max((len(g["nodes"]) for g in graphs), default=0)
+        st["input_tok"] = st["code_red_tok"] + ntok(row["tree"])
+    row["stats"] = st
+    return row
 
 
 def load_jsonl(name: str) -> list[dict]:
@@ -177,18 +249,23 @@ def load_jsonl(name: str) -> list[dict]:
     return [json.loads(l) for l in path.open(encoding="utf-8")] if path.exists() else []
 
 
-def generator_rows() -> list[dict]:
+def generator_rows(sample: int = 0) -> list[dict]:
+    from graphart.hier import hier_from_code
     rows = []
-    for split in ("train", "val", "test"):
-        for r in load_jsonl(f"large_{split}"):
-            rows.append(pack(r["id"], f"gen-t{r['tier']}", r["code"], r["graph"],
-                             family=r.get("family", ""), split=split))
+    src = [(split, r) for split in ("train", "val", "test") for r in load_jsonl(f"large_{split}")]
+    if sample:
+        src = random.Random(1).sample(src, sample)
+    for split, r in src:
+        h, _ = hier_from_code(r["code"])
+        rows.append(pack(r["id"], f"gen-t{r['tier']}", r["code"], r["graph"], h,
+                         family=r.get("family", ""), split=split))
     return rows
 
 
 def fresh_rows(n: int, seed: int) -> list[dict]:
     from graphart.extract import graph_from_code
     from graphart.generate_large import FAMILIES, generate_large_program
+    from graphart.hier import hier_from_code
     rng, rows, failed = random.Random(seed), [], 0
     families = sorted(FAMILIES)
     for tier in (5, 6):
@@ -197,35 +274,146 @@ def fresh_rows(n: int, seed: int) -> list[dict]:
             code = generate_large_program(rng, tier, fam)
             try:
                 graph, _ = graph_from_code(code)
+                h, _ = hier_from_code(code)
             except Exception:
                 failed += 1
                 continue
-            rows.append(pack(f"fresh-t{tier}-{i:03d}", f"fresh-t{tier}", code, graph, family=fam))
+            rows.append(pack(f"fresh-t{tier}-{i:03d}", f"fresh-t{tier}", code, graph, h, family=fam))
     print(f"fresh: {len(rows)} traced, {failed} failed to trace")
     return rows
 
 
+def v3_rows(n: int, seed: int) -> list[dict]:
+    """Programs from generator v3 (graphart/generate_v3.py): 70% networks, 30% blocks."""
+    from graphart.extract import graph_from_code
+    from graphart.generate_v3 import KINDS, generate_v3_program
+    from graphart.hier import hier_from_code
+    rng, rows, failed = random.Random(seed), [], 0
+    for i in range(n):
+        fam = KINDS[i % len(KINDS)]
+        kind = "network" if rng.random() < 0.7 or fam == "vit" else "block"
+        code = generate_v3_program(rng, kind, fam)
+        try:
+            graph, _ = graph_from_code(code)
+            h, _ = hier_from_code(code)
+        except Exception:
+            failed += 1
+            continue
+        rows.append(pack(f"v3-{kind[:3]}-{fam}-{i:03d}", f"v3-{kind[:3]}", code, graph, h, family=fam))
+    print(f"v3: {len(rows)} programs, {failed} failed to trace")
+    return rows
+
+
+def train_rows(n: int, seed: int) -> list[dict]:
+    """Programs taken from the hierarchical training set itself (data/generated/hier_train.jsonl):
+    generator v3 rows spread over families and network/block, and a few tiers 1-4 rows. The id
+    names the round 2 patterns a program contains."""
+    import collections
+    from graphart.extract import graph_from_code
+    rows = load_jsonl("hier_train")
+    rng = random.Random(seed)
+    rng.shuffle(rows)
+    v3 = [r for r in rows if r["source"] == "v3"]
+    by = collections.defaultdict(list)
+    for r in v3:
+        by[(r["family"], r["kind"])].append(r)
+    keys = sorted(by)
+    picked, i = [], 0
+    while len(picked) < n and any(by.values()):
+        k = keys[i % len(keys)]
+        if by[k]:
+            picked.append(by[k].pop())
+        i += 1
+    picked += [r for r in rows if r["source"] == "tiers14"][:max(2, n // 15)]
+
+    def tags(code: str) -> str:
+        t = []
+        if "start=len(" in code:
+            t.append("mixed")
+        if "downsample=i > 0" in code:
+            t.append("staged")
+        if "down_type" in code:
+            t.append("down_type")
+        if re.search(r"\(self, block, ", code):
+            t.append("block-arg")
+        if "feature_info" in code:
+            t.append("feature_info")
+        if "grad_checkpointing" in code:
+            t.append("ckpt")
+        return ("-" + "-".join(t)) if t else ""
+
+    out = []
+    for r in picked:
+        try:
+            graph, _ = graph_from_code(r["code"])
+        except Exception:
+            continue
+        group = "t14" if r["source"] == "tiers14" else f"v3-{r['kind'][:3]}"
+        out.append(pack(f"{r['id']}-{r['family']}{tags(r['code'])}", group, r["code"], graph, r["hier"],
+                        family=r["family"], split="train"))
+    print(f"training set: {len(out)} programs")
+    return out
+
+
 def torchvision_rows() -> list[dict]:
-    return [pack(r["id"], "tv-dev", r["code"], r["graph"], family=r.get("kind", ""))
+    from graphart.hier import hier_from_code
+    return [pack(r["id"], "tv-dev", r["code"], r["graph"], hier_from_code(r["code"])[0], family=r.get("kind", ""))
             for r in load_jsonl("torchvision")]
 
 
+def _network_row(rid, group, family, model, builder, prefixes, example):
+    from graphart.extract import graph_from_module
+    from graphart.hier import hier_from_module
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from build_hier_eval import assemble
+    code, _ = assemble(model, builder, "", prefixes)
+    graph = graph_from_module(model, example_input=example)
+    h, _ = hier_from_module(model, lambda c: c.__module__.startswith(prefixes), None)
+    return pack(rid, group, code, graph, h, family=family)
+
+
 def full_model_rows() -> list[dict]:
+    """Whole torchvision networks, with their code assembled as in the dev set."""
     import torch
     import torchvision.models as tvm
-    from graphart.extract import graph_from_module
     rows = []
     for name, kwargs, side in FULL_MODELS:
         try:
             torch.manual_seed(0)
-            model = getattr(tvm, name)(weights=None, **kwargs)
-            graph = graph_from_module(model, example_input=torch.randn(1, 3, side, side))
-            src = inspect.getsource(inspect.getmodule(type(model)))
+            builder = tvm.get_model_builder(name)
+            model = builder(weights=None, **kwargs)
+            rows.append(_network_row(f"full-{name}", "tv-full", name, model, builder, ("torchvision.models",),
+                                     torch.randn(1, 3, side, side)))
         except Exception as e:                      # a model fx cannot trace is reported, not fatal
             print(f"  full model {name}: skipped ({type(e).__name__}: {str(e)[:80]})")
+    return rows
+
+
+def timm_rows(n: int) -> list[dict]:
+    """Real timm code of the kind used for training: one model from each of n allowed files
+    (never a holdout architecture or a timm test family -- FROZEN_v2.json)."""
+    import collections
+    import torch
+    import timm
+    from timm.models import model_entrypoint
+    frozen = json.loads((DATA / "FROZEN_v2.json").read_text(encoding="utf-8"))
+    exclude = set(frozen["training_exclusions"]["timm_files"])
+    by_file = collections.defaultdict(list)
+    for m in timm.list_models():
+        by_file[model_entrypoint(m).__module__.split(".")[-1]].append(m)
+    files = [f for f in sorted(by_file) if f not in exclude]
+    rows = []
+    for f in files:
+        if len(rows) >= n:
+            break
+        name = sorted(by_file[f], key=len)[0]
+        try:
+            torch.manual_seed(0)
+            b = model_entrypoint(name)
+            rows.append(_network_row(f"timm-{name}", "timm", f, b(), b, ("timm.models",), None))
+        except Exception:
             continue
-        rows.append(pack(f"full-{name}", "tv-full", src, graph, family=name, code_is_file=True))
-        print(f"  full model {name}: {len(graph['nodes'])} nodes")
+    print(f"timm: {len(rows)} programs")
     return rows
 
 
@@ -235,9 +423,18 @@ def main() -> None:
     ap.add_argument("--fresh", type=int, default=0, help="also generate N new programs per tier")
     ap.add_argument("--seed", type=int, default=12345)
     ap.add_argument("--no-full", action="store_true", help="skip tracing whole torchvision models")
+    ap.add_argument("--timm", type=int, default=25, help="real timm training-type programs to show (0 = none)")
+    ap.add_argument("--sample", type=int, default=0, help="only this many generator programs (a light page)")
+    ap.add_argument("--v3", type=int, default=0, help="also N programs from generator v3")
+    ap.add_argument("--no-v2", action="store_true", help="leave out generator v2's dataset")
+    ap.add_argument("--train-sample", type=int, default=0, help="also N programs from hier_train.jsonl")
     args = ap.parse_args()
 
-    rows = generator_rows()
+    rows = [] if args.no_v2 else generator_rows(args.sample)
+    if args.v3:
+        rows += v3_rows(args.v3, args.seed)
+    if args.train_sample:
+        rows += train_rows(args.train_sample, args.seed)
     print(f"generator dataset: {len(rows)} programs")
     if args.fresh:
         rows += fresh_rows(args.fresh, args.seed)
@@ -246,6 +443,8 @@ def main() -> None:
     rows += tv
     if not args.no_full:
         rows += full_model_rows()
+    if args.timm:
+        rows += timm_rows(args.timm)
 
     payload = json.dumps({"rows": rows, "idioms": list(IDIOMS)}, separators=(",", ":"))
     html = TEMPLATE.read_text(encoding="utf-8").replace("/*__DATA__*/null", payload.replace("</", "<\\/"))

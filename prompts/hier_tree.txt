@@ -1,0 +1,11 @@
+Without running it, write the module tree this PyTorch program builds: every module by
+attribute name, nested by two-space indentation, starting with TREE and the top-level class.
+A built-in torch.nn layer with its parameters, e.g. Conv2d(in=16,out=32,k=3,s=2,p=1);
+a class defined in the code with a variant tag, e.g. BasicBlock#2 -- the same tag wherever
+its forward() runs the same way; a class whose code is not shown, by its name only;
+consecutive identical numbered children once, e.g. 0-2: Block#1.
+---USER---
+Code:
+```python
+{code}
+```

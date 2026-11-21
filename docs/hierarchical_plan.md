@@ -69,13 +69,20 @@ for drawing only), depth, merges, skip connections, fan-in, block counts.
   in one network (downsample on/off, stride, flags); imported layers with no source
   (opaque leaves); `_make_layer`, config tables, injected `norm_layer`/`block`
   arguments. Small share (~10–20%) of tiers 1–4 as insurance (finding 8).
-- **Dev (new, replaces the 21):** whole torchvision networks plus blocks from a fixed list
-  of families, ~40–60 samples, sample = the model file's classes + one construction line.
-  The 17 old holdout families may go here (we have read their failure analysis).
-- **Holdout (new, frozen before any generator change or training):** families never
-  looked at — candidates Swin, MaxViT, MViT, detection/segmentation heads (FCN, LRASPP,
-  RetinaNet/SSD heads), and/or timm models (real code by other authors; needs
-  `pip install timm`, free). sha256 + protocol in a new `data/generated/FROZEN_v2.json`.
+- **Real code in training: timm** (decided 19 Nov). timm models are real code by other
+  authors, CNN-heavy like torchvision. Needs `pip install timm` (free). timm models of the
+  **holdout's architectures are excluded** from training (Swin, MaxViT, MViT and any other
+  holdout family), so the holdout stays unseen at the architecture level, not only the
+  code level. Generator programs remain the bulk: all of torchvision is 108 distinct
+  block wirings (121 constructors, 38 files), 800 generator programs are 648 and fresh
+  ones keep adding ~0.4 each.
+- **Dev (new, replaces the 21):** whole torchvision networks plus blocks from the families
+  already looked at (the 21's, the old holdout's, and the 16 full networks in the viewer),
+  ~40–60 samples, sample = the model file's classes + one construction line.
+- **Holdout (new, frozen before any generator change or training):** torchvision families
+  never looked at — proposed Swin (v1/v2), MaxViT, MViT (v1/v2), Swin3D, FCN and LRASPP
+  heads. sha256 + protocol in a new `data/generated/FROZEN_v2.json`. Hugging Face vision
+  models (69 in `transformers`) are a possible second holdout source if they trace.
 - Builder rejects training programs whose variant graphs are isomorphic to a whole
   dev/holdout sample's, as now.
 
@@ -128,6 +135,105 @@ only 1–20% (DenseNet 6638 → 5426), so it is not worth a second notation. The
 are DenseNet-121 and Inception-v3 (siblings differ in width, or are not numbered), so the
 fallback for those is splitting the tree call per top-level child (decide in phase 4–5).
 
+## Phase 2 result (19 Nov): eval sets built, test sets frozen
+
+`scripts/build_hier_eval.py` → `data/generated/hier_{dev,holdout,timm_test}.jsonl` and
+`FROZEN_v2.json` (sha256 of holdout and timm test; a rebuild with `--check` reproduces both).
+
+| Set | Programs | What | Flat nodes median / max | Code chars median / max |
+|---|---|---|---|---|
+| dev | 51 | the 21 dev blocks + 30 whole torchvision networks of seen families | 71 / 548 | 5,441 / 18,599 |
+| holdout (frozen) | 15 | Swin, Swin v2, MaxViT, MViT, Swin3D, FCN, LRASPP — every constructor | 475 / 1,902 | 19,729 / 26,377 |
+| timm test (frozen) | 6 | DLA, CSPNet, GhostNet, two sizes each (no backup needed) | 565 / 905 | 27,135 / 36,696 |
+
+All 72 are lossless. A network's code is assembled from the real files: every class the
+model is built from in `torchvision.models` / `timm.models`, what those reference in the
+same files, and the builder; docstrings dropped; `torchvision.ops` / `timm.layers` classes
+are opaque boxes. timm training excludes the files `swin_transformer*`, `maxxvit`,
+`mvitv2`, `dla`, `cspnet`, `ghostnet` (recorded in FROZEN_v2.json).
+
+Two extractor fixes came out of building the sets, both general (re-checked on all 837
+earlier programs, still lossless): buffers are traced as named reads (`@relative_position_index`)
+instead of fx's anonymous `_tensor_constantN`, and the source assembler follows code
+identifiers only (not words in strings, not infrastructure files).
+
+**New risk — prompt length.** Real networks' code is long: holdout ~5–7k tokens, timm
+~7–10k (chars/3.8). Together with long trees this exceeds what the 1.5B trained on before
+(~6k tokens total on a T4). The per-class wiring task is unaffected (one class at a time);
+the tree task is the problem. To decide in phase 4–5: give the tree task only `__init__`
+methods and builders (drop `forward` bodies), and/or split the tree call per top-level child.
+
+**Code reducer (20 Nov), `graphart/reduce.py`.** A static rewrite applied to every program
+before the model reads it — in training, evaluation and general use: drops docstrings,
+comments, type annotations (not in dataclasses), methods and functions nothing refers to,
+and weight-init / API-logging calls; re-printed with `ast.unparse`. It never runs the code
+or decides a branch. Checked: on 981 executable programs (generator, dev 21, tiers 1–4
+sample) the traced truth of the reduced code is identical to the original's.
+
+| Set | Code tokens saved | Tree-task tokens (code + tree), max before → after |
+|---|---|---|
+| generator | 3% (already lean) | — |
+| dev networks | 31% | 10,824 → 9,912 (dev, all) |
+| timm training files | 40% (max 26,052 → 10,899 code) | — |
+| holdout | — | 9,988 → 8,381 |
+| timm test | — | 16,320 → 12,072 |
+
+The reducer must be declared as a pipeline step in the FROZEN_v2 amendment before scoring.
+**Adopted (20 Nov):** every prompt is built from `reduce_source(code)` — trainer, runner
+and interface (phase 5). The stored datasets keep the original code, so frozen hashes are
+unchanged.
+
+**Generator vs real code under the new schema (20 Nov, viewer), median / max:**
+
+| | Reduced code tokens | Tree lines | Block graphs | Largest block | Nesting | Classes |
+|---|---|---|---|---|---|---|
+| generator tier 6 | 702 / 975 | 54 / 138 | 3 / 5 | 12 / 25 | 4 / 5 | 3 / 4 |
+| torchvision networks (16) | 1,379 / 4,366 | 78 / 433 | 3 / 7 | 8 / 27 | 4 / 6 | 2.5 / 8 |
+| timm (25, training-type) | 3,796 / 7,406 | 99 / 540 | 6 / 13 | 29 / 119 | 6 / 10 | 6 / 11 |
+
+The generator's programs are 2–5× shorter, shallower and use fewer classes and block types
+than real networks — the targets for the generator rework (phase 4).
+
+`graphart/hier.py` is hashed in FROZEN_v2.json; any later change must still pass
+`build_hier_eval.py --check`, or be recorded as a dated amendment.
+
+## Phase 3/5: scorer, runner, evaluation notebook (21 Nov)
+
+| Piece | File | What it does |
+|---|---|---|
+| Scorer | `graphart/hier_score.py` | per program: `parse`; tree as (path, description) multisets — `tree_exact`, `tree_struct` (no layer params), `tree_f1`; `variants` (same partition of block instances, up to renumbering); `wiring_right/total` per truth variant (graph isomorphism: node kind + target, edges with slot + selector); `flat_exact` / `flat_topo` = `inline(answer, ref=truth)` vs `inline(truth)` with `node_label` / `topology_label` — the headline `right`, comparable with the flat-schema numbers; `category` = first failing part (parse, tree, params, variants, wiring, assembly) |
+| Scoring CLI | `pipeline/score_hier.py` | table per run, by kind and source, Wilson 95% CI on `right`; writes `results/<run>.score.json`; frozen splits need `--frozen` |
+| Runner | `pipeline/run_hier.py` | tree call on reduced code → one wiring call per variant tag of the model's own tree (pre-order, `#0` = built but never run, skipped; no call for a class not in the code) → TREE + GRAPH answer; `--oracle-tree` = wiring alone on the truth's tree (no tree call); replies cached per call, results saved after every program; frozen splits need `--frozen`; caps `--tree-tokens 8192 --wire-tokens 2048` |
+| HF backend | `pipeline/backends.py` | the GQA-expansion patch on GPU (prompts up to ~16k tokens) |
+| Eval notebook | `make_kaggle_notebook.py --hier-eval` → `notebooks/kaggle_hier_eval.ipynb` | adapter as an uploaded input; GPU 0: `hier_dev`, then `hier_dev --oracle-tree`; GPU 1: `hier_gen_test`; time guard; scores in-notebook; `graphart_hier_eval.zip`. No frozen set in the bundle |
+
+Checks: the true answer scores `right` on all 126 dev + gen_test programs; broken answers fail in
+the part broken (a layer parameter → `params` 126/126, a swapped edge → `wiring` 104/105 (the
+other swap was symmetric), a renamed tag → `variants` or `wiring`, garbage → `parse`). The truth
+put through the runner's cache scores 75/75 on gen_test and 49/51 on dev, both modes; the 2
+dev misses are the assembler defect below. Untuned qwen2.5-coder:1.5b (Ollama, 2 blocks):
+replies are box-drawing trees, recorded as unreadable and scored `parse`.
+
+**Assembler defect found (21 Nov, not fixed):** `build_hier_eval.assemble` follows references
+only to functions and `nn.Module` classes, and never includes module-level assignments. Plain
+classes (config dataclasses) and constants are missing from real-code samples. Static check
+(names used, never defined; symtable): dev 30/51 programs, timm training 63/177, v3 0/1,350,
+tiers 1–4 0/283. Many are harmless (`ResNet18_Weights`), some carry structure: VGG `cfgs`,
+`MBConvConfig` (the only reference to `MBConv` — so the reducer drops the class and
+`dev-efficientnet_b0` / `_v2_s` cannot be answered), `InvertedResidualConfig`, RegNet
+`BlockParams`, timm `model_cfgs` (21). The frozen holdout and timm test were built by the
+same assembler; a fix changes their hashes (a dated amendment before any scoring).
+
+**Fixed and re-frozen (21 Nov, user's go-ahead) — FROZEN_v2.json amendment 1.** `assemble`
+now follows plain classes (not Enums: weight enums stay out) and module-level constants of a
+shown file, and aliases. Dev: undefined names left = weight enums only; 16 programs' code grew
+(VGG +300 tokens, EfficientNet/RegNet +650–960); truth unchanged (51/51); every variant's
+class now in the reduced code; truth through the runner 51/51. `build_hier_eval.py
+--refreeze` rebuilt all three (counts only printed): 51 / 15 / 6 programs, all lossless;
+holdout a3688e55c989 → 3f7b41236abf, timm_test 2520ea9cea2b → 68b1d4b60318; `--check`
+reproduces both. hier.py unchanged since the first freeze. **Not rebuilt:** the timm training
+rows (63/177 affected) — the 21 Nov adapter was trained on them; rebuild before any retraining.
+
 ## Risks
 
 - **Tree length.** Siblings with different widths don't collapse (EfficientNet-B0: 337
@@ -144,7 +250,8 @@ fallback for those is splitting the tree call per top-level child (decide in pha
 ## Decisions (user, 19 Nov)
 
 1. Variable-tagged edges in wiring graphs: **no** — plain `← src` edges.
-2. Holdout source: **both** unseen torchvision families and timm.
+2. timm is **training data**; the holdout is unseen torchvision families (changed from
+   "both", 19 Nov).
 3. Tiers 1–4 share in training: **~15%**.
 4. One two-task adapter vs two adapters: **one**, chosen for time (one training run).
    E1/E4 did not test this: they showed that composing two *separate* models (mixed-v2
