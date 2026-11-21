@@ -1,0 +1,5 @@
+# Data sets keep LF line endings in every checkout: the frozen test sets are identified by the
+# sha256 of their bytes (data/generated/FROZEN.json, FROZEN_v2.json), and core.autocrlf would
+# otherwise rewrite them to CRLF on Windows and break the hashes.
+data/generated/**/*.jsonl text eol=lf
+data/generated/*.json text eol=lf
