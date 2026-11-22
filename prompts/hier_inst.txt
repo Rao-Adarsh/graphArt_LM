@@ -1,0 +1,16 @@
+Without running it, write what one module instance of this PyTorch program contains: its
+child modules by attribute name, one per line, and inside torch containers (Sequential,
+ModuleList, ModuleDict) their children indented by two more spaces. A built-in torch.nn
+layer with its parameters, e.g. Conv2d(in=16,out=32,k=3,s=2,p=1); an instance of a class
+defined in the code with the arguments its constructor receives, by parameter name and
+leaving out defaults, e.g. Bottleneck(inplanes=64, planes=64, stride=2) -- its own contents
+are asked for separately, so not here; a class whose code is not shown, by its name only;
+consecutive identical numbered children once, e.g. 0-2: Block(dim=64). An instance with no
+child modules is answered (no child modules). For the module the code builds, the first line
+is its class name.
+---USER---
+Code:
+```python
+{code}
+```
+INSTANCE {instance}

@@ -289,7 +289,14 @@ def main() -> None:
                          "hier_val")
     ap.add_argument("--hier-max-wire", type=int, default=0,
                     help="with --hier: at most this many wiring examples per program (0 = all)")
+    ap.add_argument("--hier-inst", action="store_true",
+                    help="per-instance trees (graphart/hier_inst.py, scripts/build_hier_inst.py): one example "
+                         "per distinct class instance; splits default to hier_inst_train / hier_inst_val")
+    ap.add_argument("--hier-inst-max", type=int, default=0,
+                    help="with --hier-inst: at most this many examples per program, the root first (0 = all)")
     args = ap.parse_args()
+    if args.hier_inst and args.train_split == "train":
+        args.train_split, args.val_split = "hier_inst_train", "hier_inst_val"
     if args.hier and args.train_split == "train":
         args.train_split, args.val_split = "hier_train", "hier_val"
 
@@ -337,7 +344,36 @@ def main() -> None:
                   f"{', '.join(dropped[:8])}{' ...' if len(dropped) > 8 else ''}", flush=True)
         return out
 
+    def encode_inst(rows: list[dict], name: str) -> list[dict]:
+        from graphart.hier_inst import INST_PROMPT
+        system = load_prompt(INST_PROMPT)[0]
+        out, dropped, per = [], [], {}
+        for r in rows:
+            per.setdefault(r["program"], []).append(r)
+        chosen = []
+        for prog in per.values():                # pre-order, the root first
+            k = args.hier_inst_max
+            if k and len(prog) > k:              # the root, then k-1 spread evenly over the rest
+                rest = prog[1:]
+                prog = [prog[0]] + [rest[round(i * (len(rest) - 1) / max(k - 2, 1))] for i in range(k - 1)]
+            chosen += prog
+        for r in chosen:
+            ex = {"id": r["id"], "code": "", "target": r["answer"]}
+            try:
+                out.append(encode(tokenizer, system, r["user"], ex, args.max_len))
+            except ValueError:
+                if not args.drop_over_max:
+                    raise
+                dropped.append(r["id"])
+        print(f"{name}: {len(out)} instance examples from {len(per)} programs", flush=True)
+        if dropped:
+            print(f"{name}: left out {len(dropped)} examples over --max-len {args.max_len}: "
+                  f"{', '.join(dropped[:8])}{' ...' if len(dropped) > 8 else ''}", flush=True)
+        return out
+
     def encode_all(rows: list[dict], name: str) -> list[dict]:
+        if args.hier_inst:
+            return encode_inst(rows, name)
         if args.hier:
             return encode_hier(rows, name)
         out, dropped = [], []
@@ -453,7 +489,7 @@ def main() -> None:
     tokenizer.save_pretrained(str(out))
     evals = [h for h in trainer.state.log_history if "eval_loss" in h]
     summary = {"base": args.base,
-               "prompt": "hier_tree+hier_wire" if args.hier else ("wirer_brief" if args.wirer else "two_step" if args.full_prompts
+               "prompt": "hier_inst" if args.hier_inst else "hier_tree+hier_wire" if args.hier else ("wirer_brief" if args.wirer else "two_step" if args.full_prompts
                           else "two_step_brief") if args.two_step else PROMPT, "excluded_construct": args.exclude_construct,
                "train_split": args.train_split, "val_split": args.val_split, "max_len": args.max_len,
                "train_examples": len(train),
