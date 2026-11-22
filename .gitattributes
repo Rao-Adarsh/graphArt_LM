@@ -3,3 +3,8 @@
 # otherwise rewrite them to CRLF on Windows and break the hashes.
 data/generated/**/*.jsonl text eol=lf
 data/generated/*.json text eol=lf
+
+# GitHub shows these collapsed in diffs (generated data and notebooks; scripts/make_kaggle_notebook.py
+# writes the notebooks), so a commit that touches them still renders.
+data/generated/**/*.jsonl linguist-generated=true
+notebooks/*.ipynb linguist-generated=true
