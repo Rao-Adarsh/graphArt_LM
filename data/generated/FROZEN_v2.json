@@ -100,6 +100,25 @@
         "n": 6,
         "lossless": 6
       }
+    },
+    {
+      "date": "2026-11-22",
+      "kind": "scoring measure (declared before any reply on the frozen sets exists)",
+      "reason": "The user's decision after reading the dev results (docs/experiments.md, 22 Nov): only the hierarchical drawing counts; how it expands to the flat fx graph carries no weight. This fixes how the frozen sets are scored. It does not yet fix the models or pipelines: they are named in a further dated amendment, also before any reply on these sets exists, and every pipeline named there is scored once, together.",
+      "headline": "hier_right: the reply parses, the tree (with layer parameters, compared order-free) equals the truth's, the block instances fall into the same variant partition (up to renaming), and every visible variant's wiring graph is isomorphic to the truth's (node kind + target, edges with slot and selector). No inlining.",
+      "truth_conventions": "Unchanged and strict: the truth's wiring is graphart/hier.py's as built. Known on dev/gen_test (22 Nov): a consumer of an nn.Identity placeholder is wired past it in the truth, and one variant split into two identical ones counts as a wrong partition. Neither is relaxed for the frozen run.",
+      "reported_with_it": [
+        "Wilson 95% interval for hier_right",
+        "split by kind (block / network) and by family",
+        "tree (no params), tree, variants, variant graphs right (count), all wiring, tree F1",
+        "first failing part",
+        "flat exact (inlined graph == fx, node labels) as a secondary column only"
+      ],
+      "comparisons": "Between two pipelines on the same programs: exact McNemar on the discordant programs for hier_right. Thresholds for success are declared with the pipelines in the next amendment.",
+      "graphart_hier_sha256": "7988df2e3a856d76f0e0018f4a1aeeccbca56170a6bb16878f86582fc043b190",
+      "graphart_hier_score_sha256": "bacf0b44ba8b0bfe211db794e871d7159ff13852592567068ed228e9fa9d46d8",
+      "pipeline_score_hier_sha256": "73879ede48b0ba3a63d9c091e2e134cb726116d29057faade7b098dfb964df8b",
+      "replies_on_frozen_sets": 0
     }
   ]
 }

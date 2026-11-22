@@ -4,8 +4,10 @@
     python -m pipeline.score_hier results/<run>.jsonl --per-sample
 
 The truth is the run's split (from its .meta.json) in data/generated/. Measures are
-graphart/hier_score.py's; `right` (the flat graph after inline equals fx's, with layer
-parameters) is the headline, shown with its Wilson 95% interval. Writes
+graphart/hier_score.py's. Headline since 22 Nov: `hier_right` (the drawing itself, no
+expansion: tree with layer parameters, variant partition and every wiring graph right),
+shown with its Wilson 95% interval; `right` (the flat graph after inline equals fx's) is
+reported beside it. Writes
 results/<run>.score.json with every program's measures. The frozen sets need --frozen.
 """
 
@@ -23,8 +25,8 @@ from pipeline.run_prompting import ROOT
 
 DATA = ROOT / "data" / "generated"
 COLS = [("parse", "parse"), ("tree_struct", "tree (no params)"), ("tree_exact", "tree"),
-        ("variants", "variants"), ("wiring_all", "all wiring"), ("flat_topo", "flat topo"),
-        ("right", "RIGHT (flat exact)")]
+        ("variants", "variants"), ("wiring_all", "all wiring"), ("hier_right", "HIER RIGHT"),
+        ("flat_topo", "flat topo"), ("right", "flat exact")]
 CATEGORIES = ("right", "parse", "tree", "params", "variants", "wiring", "assembly")
 
 
@@ -51,12 +53,12 @@ def table(rows: list[dict], label: str) -> str:
     for key, name in COLS:
         k = sum(bool(r[key]) for r in rows)
         cells.append(f"{name} {k}/{n}")
-    k = sum(r["right"] for r in rows)
+    k = sum(r["hier_right"] for r in rows)
     lo, hi = wilson(k, n)
     wr = sum(r["wiring_right"] for r in rows), sum(r["wiring_total"] for r in rows)
     f1 = sum(r["tree_f1"] for r in rows) / n
     return (f"  {label} (n={n}): " + " | ".join(cells) +
-            f"\n      right {k / n:.0%} [95% CI {lo:.0%}-{hi:.0%}]; tree F1 {f1:.3f}; "
+            f"\n      hier right {k / n:.0%} [95% CI {lo:.0%}-{hi:.0%}]; tree F1 {f1:.3f}; "
             f"variant graphs right {wr[0]}/{wr[1]}")
 
 
@@ -87,9 +89,10 @@ def main() -> None:
                       f"wiring {r['wiring_right']}/{r['wiring_total']}"
                       + (f"  ({r['error'] or r['run_error']})" if (r['error'] or r['run_error']) else ""))
         out = path.with_name(path.stem + ".score.json")
-        k = sum(r["right"] for r in rows)
-        out.write_text(json.dumps({"run": path.stem, "meta": meta, "n": len(rows), "right": k,
-                                   "wilson95": wilson(k, len(rows)), "categories": dict(cats),
+        k = sum(r["hier_right"] for r in rows)
+        out.write_text(json.dumps({"run": path.stem, "meta": meta, "n": len(rows), "hier_right": k,
+                                   "wilson95": wilson(k, len(rows)),
+                                   "right": sum(r["right"] for r in rows), "categories": dict(cats),
                                    "programs": rows}, indent=1), encoding="utf-8")
         print(f"  -> {out}")
 

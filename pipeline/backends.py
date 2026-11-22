@@ -19,7 +19,7 @@ import urllib.request
 
 ANTHROPIC_DEFAULT = "claude-opus-5"
 OLLAMA_DEFAULT = "qwen2.5-coder:1.5b"
-OLLAMA_URL = "http://localhost:11434/api/generate"
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")   # one server per GPU on Kaggle
 OPENROUTER_DEFAULT = "qwen/qwen-2.5-coder-32b-instruct"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 HF_DEFAULT = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
@@ -153,7 +153,7 @@ class OllamaBackend:
             self.url, data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json"})
         try:
-            with urllib.request.urlopen(request, timeout=600) as response:
+            with urllib.request.urlopen(request, timeout=1800) as response:
                 body = json.loads(response.read())
         except urllib.error.URLError as exc:
             raise BackendError(

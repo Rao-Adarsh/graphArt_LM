@@ -83,6 +83,50 @@ def block_tags(tree: dict) -> list[str]:
     return seen
 
 
+# How each layer's parameters are written (graphart/extract.py _layer_params), for prompted
+# models: the worked examples cannot show every layer. Tuned adapters learnt it from data.
+LAYER_FORMATS = """Layer parameters are written exactly like this (any other torch.nn layer by its name alone, e.g. ReLU):
+Conv1d/Conv2d/Conv3d/ConvTranspose2d(in=,out=,k=,s=,p=) plus g= only when groups is not 1; Linear(in=,out=,bias=True|False);
+BatchNorm1d/BatchNorm2d/BatchNorm3d(features=); GroupNorm(features=<channels>); LayerNorm(shape=[64]);
+MaxPool2d/AvgPool2d(k=,s=); AdaptiveAvgPool2d/AdaptiveMaxPool2d(out=); Dropout(p=); Embedding(num=,dim=); Flatten(start=,end=).
+A kernel, stride or padding that is the same in every dimension is one number (k=3), otherwise a list with x between the values (k=[1x7]); LayerNorm over two dims is shape=[64x64]."""
+
+
+def shots(k: int, ttpl: str, wtpl: str) -> tuple[str, str]:
+    """Worked examples for a prompted (untuned) model, from the TRAIN split only, chosen by a
+    fixed rule: k=1 the smallest generator network with a collapsed repeat (`0-2:`) and >= 3
+    variants; k=2 adds the smallest generator block with >= 2 variants first. The wiring
+    examples are that network's first two variant graphs. Returns (tree prefix, wire prefix)."""
+    from graphart.hier_tasks import tree_task
+    if k <= 0:
+        return "", ""
+    saved = ROOT / "prompts" / f"hier_shots{k}.json"      # written once here, shipped to Kaggle
+    if saved.exists():
+        d = json.loads(saved.read_text(encoding="utf-8"))
+        return d["tree"], d["wire"]
+    rows =[json.loads(l) for l in (DATA / "hier_train.jsonl").open(encoding="utf-8")]
+    rows = [r for r in rows if r["source"] == "v3"]
+    rows.sort(key=lambda r: (r["tree_task_tokens"], r["id"]))
+
+    def n_tags(r):
+        return len(block_tags(r["hier"]["tree"]))
+    net = next(r for r in rows if r["kind"] == "network" and n_tags(r) >= 3
+               and any("-" in l.split(":")[0] for l in tree_text(r["hier"]).splitlines()))
+    picks = ([next(r for r in rows if r["kind"] == "block" and n_tags(r) >= 2)] if k >= 2 else []) + [net]
+    tparts = []
+    for i, r in enumerate(picks, 1):
+        t = tree_task(r["code"], ttpl, r["hier"])
+        tparts.append(f"Worked example {i}:\n{t['user']}\n{t['answer']}")
+    wparts = []
+    for i, w in enumerate(wiring_tasks(net["code"], net["hier"], wtpl)[:2], 1):
+        wparts.append(f"Worked example {i}:\n{w['user']}\n{w['answer']}")
+    tail = "\n\nNow the task:\n"
+    out = {"tree": LAYER_FORMATS + "\n\n" + "\n\n".join(tparts) + tail, "wire": "\n\n".join(wparts) + tail,
+           "from_train": [r["id"] for r in picks]}
+    saved.write_text(json.dumps(out, indent=1), encoding="utf-8", newline="\n")
+    return out["tree"], out["wire"]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--backend", default="mock", choices=["anthropic", "openrouter", "ollama", "hf", "mock"])
@@ -96,6 +140,9 @@ def main() -> None:
     ap.add_argument("--num-ctx", type=int, default=None, help="Ollama only: context window")
     ap.add_argument("--oracle-tree", action="store_true",
                     help="wiring calls get the truth's variants and subtrees (wiring measured alone)")
+    ap.add_argument("--shots", type=int, default=0,
+                    help="worked examples from the train split before each prompt (prompted models; 0 for adapters)")
+    ap.add_argument("--part", help="suffix of the result file, so two processes can split one run (merge after)")
     ap.add_argument("--refresh", action="store_true")
     ap.add_argument("--cached-only", action="store_true")
     ap.add_argument("--yes", action="store_true", help="required to proceed when the run would cost money")
@@ -137,7 +184,8 @@ def main() -> None:
     except BackendError as exc:
         raise SystemExit(f"\n  {exc}\n")
     slug = (backend.model if backend else model_name).replace(":", "-").replace("/", "-")
-    prompt_name = "hier_oracle_tree" if args.oracle_tree else "hier"
+    prompt_name = ("hier_oracle_tree" if args.oracle_tree else "hier") + (f"_{args.shots}shot" if args.shots else "")
+    tshot, wshot = shots(args.shots, ttpl, wtpl)
     run_id = f"{args.backend}__{slug}__{prompt_name}__{args.split}"
     cache_dir = RESULTS / "raw" / run_id
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -154,7 +202,7 @@ def main() -> None:
         p.write_text(reply, encoding="utf-8")
         return reply, False
 
-    out = RESULTS / f"{run_id}.jsonl"
+    out = RESULTS / (f"{run_id}__part{args.part}.jsonl" if args.part else f"{run_id}.jsonl")
 
     def save() -> None:
         """Results so far, rewritten after every program: a run stopped by a time limit keeps its work."""
@@ -165,7 +213,7 @@ def main() -> None:
                 "split": args.split, "n": len(records), "of": len(rows), "failed": failed, "calls": calls,
                 "cached_calls": cached_calls, "tree_tokens": args.tree_tokens, "wire_tokens": args.wire_tokens,
                 "num_ctx": args.num_ctx}
-        (RESULTS / f"{run_id}.meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+        out.with_name(out.stem + ".meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
     records, failed, calls, cached_calls = [], 0, 0, 0
     for i, row in enumerate(rows, 1):
@@ -175,7 +223,7 @@ def main() -> None:
             reduced = reduce_source(code)
             graphs = {}
             if not args.oracle_tree:              # the oracle run takes the truth's tree: no tree call
-                tree_reply, hit = ask(f"{row['id']}.tree.txt", tsys, _fill(ttpl, code=reduced.strip()),
+                tree_reply, hit = ask(f"{row['id']}.tree.txt", tsys, tshot + _fill(ttpl, code=reduced.strip()),
                                       args.tree_tokens)
                 calls += 1
                 cached_calls += hit
@@ -184,7 +232,7 @@ def main() -> None:
                 truth = row["hier"]
                 tree_part = tree_text(truth)
                 for w in wiring_tasks(code, truth, wtpl, with_answers=False):
-                    g, hit = ask(f"{row['id']}.wire.{w['tag']}.txt", wsys, w["user"], args.wire_tokens)
+                    g, hit = ask(f"{row['id']}.wire.{w['tag']}.txt", wsys, wshot + w["user"], args.wire_tokens)
                     calls += 1
                     cached_calls += hit
                     graphs[w["tag"]] = graph_lines(g)
@@ -201,7 +249,7 @@ def main() -> None:
                         continue                 # a class not in the code: no call, no graph
                     user = _fill(wtpl, cls=tag.split("#")[0], code=src.strip(),
                                  subtree=instance_subtree(h, tag), tag=tag)
-                    g, hit = ask(f"{row['id']}.wire.{tag}.txt", wsys, user, args.wire_tokens)
+                    g, hit = ask(f"{row['id']}.wire.{tag}.txt", wsys, wshot + user, args.wire_tokens)
                     calls += 1
                     cached_calls += hit
                     graphs[tag] = graph_lines(g)

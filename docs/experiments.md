@@ -425,3 +425,240 @@ Score the holdout once, together with pre-declared baselines (14B zero-shot, mix
 step). A caution to write down first: mixed-v2's node lister comes from a generator patched
 on these 21 samples, so expect the holdout nearer Session 1's level than mixed-v2's.
 Then the remaining closing sets (large_test, edits, RQ6) on the frozen setup, and write up.
+
+## Hierarchical schema: evaluation criteria (written 22 Nov, before the results were read)
+
+Setup: the hier adapter (fresh LoRA on Qwen2.5-Coder 1.5B, tree + wiring tasks, one epoch,
+best val loss 0.0080), `pipeline/run_hier.py` with `--tree-tokens 8192 --wire-tokens 2048`,
+scored by `pipeline/score_hier.py`. Dev = `hier_dev` (51: the old 21 torchvision blocks + 30
+whole networks); `hier_gen_test` = 75 held-out generator programs. The criteria were proposed
+in the session on 22 Nov before the eval zip was opened; the Kaggle run itself had already
+finished when they were written here, but no result had been read.
+
+| # | Question | Measure | Criterion |
+|---|---|---|---|
+| C1 (main) | Whole networks right? | `right` (flat graph after inlining == fx, node labels) on the 30 dev networks | ≥ 6/30 (Wilson 95% at 6/30: 10–38%, above the flat schema's 0); strong ≥ 15/30 |
+| C2 | No worse on the old 21 blocks? | paired with the old final pipeline (mixed-v2 nodes + 1.5B wirer) on the same 21 | strict `right` ≥ 6/21 and `flat_topo` ≥ 11/21; exact McNemar on discordant pairs reported. Caveat: the old generator was patched on these 21 |
+| C3 | Pipeline sound? | `right` on gen_test | ≥ 68/75 (90%); below that, fix training/assembly before reading C1/C2 |
+| C4 | Where does it fail? (descriptive) | first failing part; own-tree vs oracle-tree wiring on dev | wiring right on all variants for ≥ 80% of dev programs ⇒ the tree is the bottleneck |
+
+Decision rule: the hier holdout and timm test are scored once regardless of these results,
+after amendment 2 of `FROZEN_v2.json` declares the model, runner, reducer, caps and their
+criteria. Dev results decide what is claimed, not whether the frozen run happens. No tuning
+loop on dev.
+
+## Hierarchical schema: dev result (22 Nov)
+
+`kaggle_results/graphart_hier_eval`: three runs, all programs answered (dev 51, oracle-tree
+dev 51, gen_test 75); 8 dev tree replies were unreadable (counted as `parse`). Scorer fix
+made after the run, before reading the criteria: `tree_exact` compared layer parameters as
+ordered text, and dev truth stores them sorted, so `tree` (with params) read 0/51. It now
+compares them order-free (`graphart/hier_score.py`, `modules`). `right`, wiring and
+variants do not depend on it and did not change.
+
+| Run | n | parse | tree (no params) | tree | variants | all wiring | flat topo | **right** | Wilson 95% |
+|---|---|---|---|---|---|---|---|---|---|
+| dev, blocks (old 21) | 21 | 21 | 13 | 10 | 18 | 15 | 11 | **9** | 24–63% |
+| dev, networks | 30 | 20 | 3 | 0 | 4 | 7 | 3 | **0** | 0–11% |
+| dev, oracle tree, blocks | 21 | — | — | — | — | 16 | 16 | **16** | 55–89% |
+| dev, oracle tree, networks | 30 | — | — | — | — | 10 | 10 | **10** | 19–51% |
+| gen_test, blocks | 24 | 24 | 23 | 23 | 23 | 22 | 23 | **23** | 80–99% |
+| gen_test, networks | 51 | 51 | 39 | 35 | 32 | 35 | 32 | **28** | 41–68% |
+
+Variant graphs right: dev 63/131 (own tree), 96/131 (oracle tree); gen_test 240/262.
+
+| Criterion | Result | Verdict |
+|---|---|---|
+| C1 networks ≥ 6/30 | 0/30 (0–11%) | **fail** |
+| C2 strict ≥ 6/21 and topo ≥ 11/21 | strict 9/21 (old 6; new-only 5, old-only 2, p = 0.45); topo 11/21 (old lenient 11; 6–6, p = 1) | **pass** (not worse; no significant gain) |
+| C3 gen_test ≥ 68/75 | 51/75 (57–77%); blocks 23/24, networks 28/51 | **fail** |
+| C4 wiring-alone ≥ 80% of dev | 26/51 programs (51%) all wiring right with the oracle tree | **below 80%**: wiring is a bottleneck too |
+
+Own tree → oracle tree on dev: 9 → 26 right (17–0 discordant, p = 2e-5); blocks 9 → 16
+(7–0, p = 0.016); networks 0 → 10 (10–0, p = 0.002).
+
+C3 check (is the pipeline broken?): no program fails at assembly in any run, and the truth
+scores 75/75 and 51/51 through the same runner and scorer. The 24 gen_test misses are tree
+errors (13), variant partition (6), params (4) and wiring (1). Examples: channel and group
+arithmetic in stage widths (`out=72, g=9` for `out=64, g=4`); the downsampling skip written
+as AvgPool + conv when `down_type` gives a strided conv; staged-ViT stages 1–2 given one
+variant though the strided conv between stages makes two. gen_test networks right by flat
+size: ≤100 nodes 10/20, 101–200 11/20, >200 7/11. By family (networks): mbconv 0/4, regnet
+1/7, convnext 1/4, dense 1/3, vit 9/15, mixer 5/5, vgg 4/4, shuffle 4/5.
+
+Dev failures, by first failing part: blocks right 9, tree 8, params 3, wiring 1; networks
+tree 17, parse 10, params 3. Of the 10 network parse failures, 8 replies are PyTorch
+`print(model)`-style listings (`weight: torch.Size([64])`, `drop_rate: 0`,
+`layer_scale: Parameter containing:`), 2 (regnet) break on node names; 3 replies run on
+past 3× the truth's length (mobilenet_v3_small, deeplabv3_mobilenet_v3_large, s3d).
+Oracle-tree wiring failures (35 variants), recurring kinds: configuration-dependent
+residuals (`InvertedResidual`, `_InvertedResidual`, `MBConv`, `FusedMBConv`: 3 vs 4 nodes,
+the residual add added or dropped), whole-network forwards of GoogLeNet / Inception3
+(22 vs 31, 24 vs 40 nodes), `ASPPPooling`, ViT `EncoderBlock`, the 3D-conv subclasses
+(`Conv3DSimple`, `Conv3DNoTemporal`: 4 vs 2), ShuffleNet `InvertedResidual` (right size,
+wrong edges).
+
+## Changed criterion (22 Nov, after the dev results were read)
+
+The user's decision: the expanded fx graph carries no weight; only the hierarchical drawing
+counts. New headline `hier_right`: tree right with layer parameters, the same variant
+partition, and every visible variant's wiring graph isomorphic to the truth — no inlining.
+`flat exact` is kept as a column. Because the change came after the dev results were seen,
+the dev numbers below are descriptive, not a test of C1–C4; the criterion is a test only on
+the frozen sets, once declared in amendment 2. Scorer: `hier_right` in
+`graphart/hier_score.py`, headline of `pipeline/score_hier.py`.
+
+| Run | n | tree (no params) | tree | variants | variant graphs right | all wiring | **hier right** | Wilson 95% | tree F1 | flat exact |
+|---|---|---|---|---|---|---|---|---|---|---|
+| dev, blocks | 21 | 13 | 10 | 18 | 26/32 (81%) | 15 | **9** | 24–63% | 0.91 | 9 |
+| dev, networks | 30 | 3 | 0 | 4 | 37/99 (37%) | 7 | **0** | 0–11% | 0.41 | 0 |
+| dev oracle tree, blocks | 21 | given | given | given | 27/32 (84%) | 16 | **16** | 55–89% | — | 16 |
+| dev oracle tree, networks | 30 | given | given | given | 69/99 (70%) | 10 | **10** | 19–51% | — | 10 |
+| gen_test, blocks | 24 | 23 | 23 | 23 | 50/52 (96%) | 22 | **21** | 69–96% | 0.98 | 23 |
+| gen_test, networks | 51 | 39 | 35 | 32 | 190/210 (90%) | 35 | **24** | 34–60% | 0.95 | 28 |
+
+On dev the two headlines agree on every program. On gen_test 6 programs are flat-right but
+not hier-right: in 4 the truth wires the consumer of an `nn.Identity` placeholder (a
+`drop_path` with rate 0) past it, leaving the Identity node with no consumer, while the model
+wires `add <- drop_path1` as the code reads; in 2 the model splits one variant into two
+(`MixerBlock`, `CNBlock`) with each graph right. Both are truth-convention questions for the
+amendment, not changed here.
+
+## Why the trees fail (22 Nov, dev and gen_test, descriptive)
+
+Module-level errors in the parsed network trees (paths + class, then layer parameters on
+the leaves whose path and class match):
+
+| Networks | parsed | truth modules | missing | extra | wrong class | leaf params wrong |
+|---|---|---|---|---|---|---|
+| gen_test | 51/51 | 5,361 | 109 (2.0%) | 91 | 31 | 171/2,794 (6.1%) |
+| dev (torchvision) | 20/30 | 2,847 | 583 (20%) | 1,993 | 68 | 416/1,120 (37%) |
+
+Dev examples, by kind of error:
+- loop and repeat counts: resnet50 / resnext50 get 4 blocks in `layer4` (truth 3), mnasnet
+  and shufflenet stages off by one or two, efficientnet_v2_s 142 of 272 modules missing
+  (stage repeats from the config table times the depth multiplier);
+- computed widths: wide_resnet50_2 72/109 leaf params wrong (`width_per_group`), mnasnet
+  78/92 (`_round_to_multiple_of(c * alpha)`), shufflenet 97/102 (`oup // 2` branches),
+  mobilenet_v2 11/14;
+- conditions: resnet18 adds a `downsample` to `layer1.0` (`stride != 1 or inplanes != ...`
+  is false there); googlenet drops the aux heads;
+- calls into another builder: deeplabv3_resnet50 72 of 183 modules (the backbone built by
+  `resnet50(...)` inside `IntermediateLayerGetter`);
+- runaway output: mobilenet_v3_small 858 and deeplabv3_mobilenet_v3_large 862 predicted
+  modules (truth 73, 119).
+- alexnet and vgg11 (no config arithmetic): structure exact, 1 leaf param wrong each.
+
+Sizes are not the difference: dev networks have median 9.5k chars of reduced code (train v3
+networks 4.3k, train timm networks 20.8k) and 84 tree lines (train 70 and 100).
+
+Old vs new in-distribution test: the flat schema's 40/40 was on `test 40` (tiers 1–4:
+median 12 flat nodes, max 24, one class, 25% with a loop in the code). hier gen_test has
+median 88 flat nodes, 4 classes, 81% with a loop. gen_test blocks, the closer match, are
+21/24.
+
+## Two runs set up 22 Nov (criteria written before either ran)
+
+Both on the 51 dev programs only; headline `hier_right` (amendment 2), comparisons paired on
+the same programs with exact McNemar on discordant programs (at n = 30: 6–0 is p = 0.03).
+Baseline = the hier 1.5B adapter: networks tree (no params) 3/30, tree 0/30, hier_right 0/30;
+all 51: hier_right 9/51; oracle-tree wiring all right 26/51, variant graphs 96/131.
+
+**P1, prompted Qwen2.5-Coder 14B** (`notebooks/kaggle_hier_14b.ipynb`): Ollama q4_K_M, two
+worked examples from the train split (`prompts/hier_shots2.json`: the smallest v3 block with
+≥ 2 variants and the smallest v3 network with a collapsed repeat and ≥ 3 variants, after a
+legend of how each layer's parameters are written, from `graphart/extract.py`), tree cap
+10,240 tokens, wiring 2,048. Two runs: whole answer, and wiring alone (`--oracle-tree`).
+- P1a, trees: does size fix the constructor arithmetic? Better if the 14B's tree (with
+  params) is right on more dev networks than the 1.5B's, discordant ≥ 6–0.
+- P1b, wiring alone: 14B vs 1.5B on all-wiring-right programs (oracle tree), McNemar.
+- P1c, composition, computed from the runs: 14B tree with the better oracle-tree wirer.
+  hier_right of a composition = that tree right (with params, same partition) and that
+  wirer's oracle-tree wiring all right (exact up to tag names, since the wiring prompt is
+  then the truth's).
+
+**P2, per-instance trees** (`graphart/hier_inst.py`, `notebooks/kaggle_hier_inst_train.ipynb`):
+a fresh 1.5B LoRA writes one class instance's children given the class's code and its
+constructor arguments (the root: the whole program); code joins the answers. Training data
+from the same 1,810 training programs; every train/val program's true answers re-assemble to
+its stored tree exactly (checked by `scripts/build_hier_inst.py`). Tonight: training only.
+Its scoring notebook comes next, with this criterion fixed now:
+- P2a, trees: per-instance tree (with params) right on more dev networks than the
+  whole-tree 1.5B (0/30), discordant ≥ 6–0. Reported with tree (no params), tree F1, and
+  hier_right with the hier adapter wiring the per-instance tree.
+
+## P1 result (23 Nov): the prompted 14B does not fix the trees, and wires worse
+
+`kaggle_results/graphart_hier_14b`: all 51 dev programs answered in both runs. 21 tree
+replies were unreadable to the runner (19 of them write list parameters with commas,
+`AdaptiveAvgPool2d(out=[6, 6])`), so those 21 got no wiring calls. Scorer fix found here:
+`score_answer` let a parameter `ParseError` escape instead of scoring `parse` (now caught;
+earlier runs never reached it because the runner failed first).
+
+Strict = the declared scorer. Lenient (post hoc, descriptive, applied to both models alike)
+forgives notation only: list params with commas, `g=1` written out, function vs tensor-method
+spelling (`.cat()` / `cat()`), argument order of add / mul; the 14B's unreadable trees are
+re-read from their raw replies.
+
+| Dev (51) | tree (no params) net / blk | tree net / blk | variant graphs right | all wiring | **hier_right** |
+|---|---|---|---|---|---|
+| 1.5B hier adapter, own tree | 3/30 · 13/21 | 0/30 · 10/21 | 63/131 | 22 | **9** |
+| 14B 2-shot, own tree, strict | 0/30 · 15/21 | 0/30 · 11/21 | 7/131 | 1 | **0** |
+| 14B 2-shot, own tree, lenient | 3/30 · 17/21 | 2/30 · 12/21 | 22/131 | 5 | **3** |
+| 1.5B, oracle tree | — | — | 96/131 | 26 | **26** |
+| 14B, oracle tree, strict | — | — | 10/131 | 0 | **0** |
+| 14B, oracle tree, lenient | — | — | 50/131 | 13 | **13** |
+
+(The 1.5B's numbers are the same strict and lenient.)
+
+| Criterion | Result | Verdict |
+|---|---|---|
+| P1a 14B trees right on more networks, ≥ 6–0 | strict 0–0; lenient 2–0 (p = 0.5) | **not met** |
+| P1b wiring alone, 14B vs 1.5B | strict 0 vs 26 programs (0–26, p < 1e-7); lenient 13 vs 26 (0–13, p = 0.0002) | **1.5B better** |
+| P1c composition 14B tree + 1.5B wiring | strict 9/51 (networks 0/30); lenient 12/51 (networks 2/30) | same as the 1.5B alone (strict) |
+
+Size alone does not run the constructors: the 14B's network trees are no more often right
+than the 1.5B's, and as a prompted wirer it is far behind the tuned 1.5B even after notation
+is forgiven.
+
+## P2 training (23 Nov)
+
+`kaggle_results/graphart_hier_inst_train`: one full epoch, 769 steps of 16 on both T4s,
+91.6 min; val loss 0.0303 / 0.0246 / 0.0203 / 0.0213 / 0.0202 / 0.0197 / **0.0196** (step
+700, kept) / 0.0196. 12,304 train / 666 val examples, none over the length limit. Not scored
+yet: P2a needs the per-instance runner and its scoring notebook.
+
+## P2 scoring set up (23 Nov)
+
+`pipeline/run_hier_inst.py`: per-instance calls (inst adapter), joined by
+`hier_inst.assemble`; wiring per distinct block instance, deepest first (hier adapter); tags
+by matching graphs per class; never-run blocks (`#0`) where the nearest block ancestor's
+graph does not reach them. Checked with true answers on every call: 99/99 val programs
+`hier_right`. A bare-named class from the code (no `__init__` of its own, e.g.
+`LayerNorm2d(nn.LayerNorm)`) is treated as a childless block. Notebook
+`notebooks/kaggle_hier_inst_eval.ipynb` (dev, then gen_test, each split over both T4s;
+inputs: both adapters). Criterion P2a as written on 22 Nov.
+
+## Lighter schemas, scored on existing replies (23 Nov, descriptive, after results were seen)
+
+What the hier adapter's existing answers would score if less were asked (truth for each
+level derived from the same fx-grounded truth):
+- S3 current: tree with params + variant partition + every wiring graph (`hier_right`);
+- S2 no layer parameters;
+- S1 skeleton: tree classes and nesting, runs of identical numbered children counted once
+  (no repeat counts, no parameters), plus per class the set of graphs = the set of true
+  variant graphs (no instance-to-variant assignment);
+- S0 class graphs only: per class in the code, the set of graphs = the true variants' (S0
+  any: each graph written matches some true variant). No tree at all.
+
+| | S3 | S2 | S1 tree | S1 | S0 | S0 any |
+|---|---|---|---|---|---|---|
+| dev blocks (21), own pipeline | 9 | 11 | 13 | 11 | 16 | 16 |
+| dev networks (30), own pipeline | **0** | 3 | 8 | 5 | **9** | **13** |
+| dev networks (30), true tree given | 10 | 10 | 30 | 10 | 10 | 16 |
+| gen_test blocks (24) | 21 | 21 | 24 | 22 | 22 | 24 |
+| gen_test networks (51) | 24 | 28 | 44 | 30 | 35 | 48 |
+
+The replies were produced for S3 (the tree is written, then used to prompt the wiring); for
+S1/S0 the tree acts only as a scratchpad. Not a test: any schema adopted from this must be
+declared (FROZEN_v2 amendment 3) before the frozen sets are scored.

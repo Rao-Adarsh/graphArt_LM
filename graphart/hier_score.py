@@ -43,7 +43,8 @@ def modules(tree: dict, with_params: bool = True) -> list[tuple[str, str]]:
 
     def walk(node, path):
         if node["kind"] == "leaf":
-            desc = node["cls"] + (_fmt_params(node["params"]) if with_params else "")
+            # parameter order is not meaningful (dev truth stores them sorted)
+            desc = node["cls"] + (_fmt_params(dict(sorted(node["params"].items()))) if with_params else "")
         else:
             desc = node["cls"]
         out.append((path, desc))
@@ -116,7 +117,7 @@ def score_answer(reply: str, truth: dict, truth_flat: dict | None = None) -> dic
     try:
         pred = from_text(reply)
         s["parse"] = True
-    except HierError as e:
+    except (HierError, ValueError) as e:     # ValueError: schema.ParseError in a layer's parameters
         s["error"] = f"parse: {e}"
         pred = None
         # a readable tree is still scored when a graph is not
@@ -125,7 +126,7 @@ def score_answer(reply: str, truth: dict, truth_flat: dict | None = None) -> dic
             if lines and lines[0].strip() == "TREE":
                 end = next((i for i, l in enumerate(lines) if l.startswith("GRAPH")), len(lines))
                 pred = {"tree": _parse_tree(lines[1:end]), "variants": {}, "problems": []}
-        except HierError:
+        except (HierError, ValueError):
             pred = None
     if pred is not None:
         pm, tm = modules(pred["tree"]), modules(truth["tree"])
@@ -164,6 +165,8 @@ def score_answer(reply: str, truth: dict, truth_flat: dict | None = None) -> dic
             except Exception as e:                       # a pathological answer must not stop scoring
                 s["error"] = f"inline: {type(e).__name__}: {e}"
     s["right"] = s["flat_exact"]
+    # the drawing itself, with no expansion: tree with params, variant partition, every wiring graph
+    s["hier_right"] = bool(s["parse"] and s["tree_exact"] and s["variants"] and s["wiring_all"])
     s["category"] = ("right" if s["right"] else
                      "parse" if not s["parse"] else
                      "tree" if not s["tree_struct"] else
