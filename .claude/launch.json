@@ -8,6 +8,12 @@
       "port": 7860
     },
     {
+      "name": "interface-worktree",
+      "runtimeExecutable": "../../../.venv/Scripts/python.exe",
+      "runtimeArgs": ["interface/app.py"],
+      "port": 7860
+    },
+    {
       "name": "generator-viewer",
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8765", "--bind", "127.0.0.1", "--directory", "results/raw"],

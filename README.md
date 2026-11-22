@@ -526,26 +526,28 @@ The fine-tuned adapter (~74 MB) is not in git; it goes in `models/qwen2.5-coder-
 
 ## Interface
 
-`interface/app.py` is a small local web app (Gradio) for trying the method on any
-PyTorch module:
+`interface/app.py` is a local web app (Gradio) with five pages, each at its own address:
 
-- **Input:** paste code, upload a `.py` file, pick one of the 254 examples (the 40 test
-  programs, 21 torchvision samples and 193 controlled edits), or **generate** a fresh
-  program with the project's generator for a chosen tier (and seed). A generated program is
-  checked against all 1,280 training graphs, and the app says whether its graph is new
-  or one the model was trained on.
-- **Reference:** `torch.fx` traces the true graph from the code.
-- **Model:** the fine-tuned Qwen2.5-Coder 1.5B reads the code — without running it — and
-  writes its graph. On a laptop CPU this takes about 1–3 minutes. For the examples, the
-  answer saved during the experiments is shown instantly; untick the box to run live.
-- **Saved answers from several models:** for the examples, *saved answer from* switches
-  between the 26 Oct adapter, mixed-v2, the final pipeline (mixed-v2's nodes + the 1.5B
-  wirer), the 14B composition and others, wherever that run exists for the set. The frozen
-  **torchvision holdout** is a set of its own, with saved answers only (it is never re-run).
-- **Output:** the two graphs side by side with every mismatch coloured (red: missed;
-  orange: invented), the metrics (`exact`, `topo`, `right graph`, node F1, edge F1,
-  connectivity preserved, shape accuracy, validity), the error category from `scripts/classify_errors.py`, the
-  validator's messages, and the raw graph text.
+| Page | Address | What it shows |
+|---|---|---|
+| Home | `/` | the question and the headline table |
+| Flat format | `/flat` | the whole fx graph [M1–M7]: examples (generated test, torchvision dev, the holdout, the edits), a generated program, or uploaded/pasted code; saved answers of every model, or the 1.5B live |
+| Hierarchical format | `/hier` | module tree + one wiring graph per class [M8–M11]: hier_dev and hier_gen_test, blocks or whole networks; saved answers of the tuned 1.5B and the prompted 14B (each also with the true tree given), or the tuned 1.5B live |
+| Edits | `/edits` | E2: the code before and after an edit, the true graph after it, each model's answer (right / the unedited graph / wrong) |
+| Results | `/results` | the report's tables and figures |
+
+- **Reference:** `torch.fx` traces the true graph from the code (`graphart/hier.py` for the
+  hierarchical one).
+- **Live answers:** Qwen2.5-Coder 1.5B on the CPU, the base loaded once (float32, ~6 GB)
+  with three LoRA adapters switched per call: mixed-v2 and the wirer (the final flat
+  pipeline, or mixed-v2 alone), and the hierarchical adapter (tree call, then one wiring call
+  per block class). The reply streams in as it is written. Measured on an i5-1235U: first
+  model load ~2 min; then a small block ~1 min (hierarchical) to ~3 min (flat, two calls).
+- **Output:** the two graphs side by side with every mismatch coloured (red: missed; orange:
+  invented), the verdict (`scripts/classify_errors.py`; for the hierarchical format the
+  first part that failed: tree, layer settings, variants, wiring), the scores, the raw reply.
+- **Frozen sets:** the torchvision holdout shows saved answers only (no live run); the
+  locked hierarchical sets (`hier_holdout`, `hier_timm_test`) are never opened.
 
 **Run it**
 ```bash
@@ -554,18 +556,11 @@ PyTorch module:
 ```bash
 .venv/Scripts/python interface/app.py
 ```
-then open http://127.0.0.1:7860. It needs the LoRA adapter in
-`models/qwen2.5-coder-1.5b-graphart-lora/` (git-ignored, ~74 MB; produced by
-`notebooks/kaggle_finetune.ipynb`), and downloads the 1.5B base model from Hugging Face
-on first use. Pasted code must define the module and create one instance; set
+then open http://127.0.0.1:7860. Saved answers come from `results/` and `kaggle_results/`;
+the adapters from `kaggle_results/<run>/lora/` (git-ignored; `interface/common.py`,
+`ADAPTERS`). In a git worktree both are also looked up in the main checkout. Pasted code
+must define the module and create one instance (`model` for the hierarchical page); set
 `example_input = torch.randn(...)` to get shapes.
-
-**What to expect.** The model is near-perfect on code written like its training data and
-draws most real-world code as a straight chain (see
-[Closing experiments](#closing-experiments-rq4rq6-fine-tuned-15b-vs-prompted-14b)); the
-torchvision examples show this. A larger prompted model was considered as a second,
-slower mode and dropped: Qwen 14B needs ~10 GB of free RAM, and the free Gemma 31B
-endpoint is rate-limited.
 
 **Safety.** Tracing runs the pasted code's constructor. The app listens on `127.0.0.1`
 only; paste only code you trust.
@@ -593,7 +588,7 @@ graphArt_LM/
 │   └── compare.py     # several runs side by side
 ├── prompts/           # the six prompts above
 ├── scripts/           # build_dataset, make_kaggle_notebook, train_lora, classify_errors, analyze_edits, analyze_rq6, ...
-├── interface/         # app.py: the Gradio interface
+├── interface/         # app.py + one file per page: the Gradio interface
 ├── models/            # the LoRA adapter (git-ignored)
 ├── notebooks/         # generated: kaggle_ollama.ipynb (Phase 1), kaggle_finetune.ipynb (Phase 2), kaggle_closing_*.ipynb
 ├── results/           # one .jsonl of replies per (model, prompt) run; raw/ is the git-ignored cache
